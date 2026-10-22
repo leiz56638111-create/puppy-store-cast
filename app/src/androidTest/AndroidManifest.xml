@@ -1,0 +1,5 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <instrumentation android:name="cn.local.livingroomcast.QualityInstrumentation" android:targetPackage="cn.local.livingroomcast" />
+    <instrumentation android:name="cn.local.livingroomcast.PlaybackInstrumentation" android:targetPackage="cn.local.livingroomcast" />
+    <instrumentation android:name="cn.local.livingroomcast.StandbyInstrumentation" android:targetPackage="cn.local.livingroomcast" />
+</manifest>

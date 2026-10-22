@@ -68,7 +68,7 @@ public final class Dlna {
             String values = switch (n) {
                 case "TransportState" -> "STOPPED,PLAYING,PAUSED_PLAYBACK,TRANSITIONING,NO_MEDIA_PRESENT";
                 case "TransportStatus" -> "OK,ERROR_OCCURRED";
-                case "TransportPlaySpeed" -> "1";
+                case "TransportPlaySpeed" -> "1/2,3/4,1,5/4,3/2,2";
                 case "PlaybackStorageMedium", "PossiblePlaybackStorageMedia" -> "NETWORK";
                 case "RecordStorageMedium", "RecordMediumWriteStatus", "PossibleRecordStorageMedia", "PossibleRecordQualityModes", "CurrentRecordQualityMode" -> "NOT_IMPLEMENTED";
                 case "CurrentPlayMode" -> "NORMAL";
@@ -85,7 +85,7 @@ public final class Dlna {
         return List.copyOf(vars.values());
     }
     public static String description(String uuid, String base) {
-        StringBuilder x = new StringBuilder("<?xml version=\"1.0\"?><root xmlns=\"urn:schemas-upnp-org:device-1-0\" xmlns:dlna=\"urn:schemas-dlna-org:device-1-0\"><specVersion><major>1</major><minor>0</minor></specVersion><URLBase>" + Xml.escape(base) + "/</URLBase><device><deviceType>" + DEVICE + "</deviceType><friendlyName>小狗便利店投屏</friendlyName><manufacturer>LivingRoomCast</manufacturer><modelDescription>Local live video receiver prototype</modelDescription><modelName>LivingRoomCast</modelName><modelNumber>0.1.5</modelNumber><serialNumber>" + Xml.escape(uuid) + "</serialNumber><UDN>uuid:" + Xml.escape(uuid) + "</UDN><dlna:X_DLNADOC>DMR-1.50</dlna:X_DLNADOC><serviceList>");
+        StringBuilder x = new StringBuilder("<?xml version=\"1.0\"?><root xmlns=\"urn:schemas-upnp-org:device-1-0\" xmlns:dlna=\"urn:schemas-dlna-org:device-1-0\"><specVersion><major>1</major><minor>0</minor></specVersion><URLBase>" + Xml.escape(base) + "/</URLBase><device><deviceType>" + DEVICE + "</deviceType><friendlyName>小狗便利店投屏</friendlyName><manufacturer>LivingRoomCast</manufacturer><modelDescription>Local live video receiver prototype</modelDescription><modelName>LivingRoomCast</modelName><modelNumber>0.1.7</modelNumber><serialNumber>" + Xml.escape(uuid) + "</serialNumber><UDN>uuid:" + Xml.escape(uuid) + "</UDN><dlna:X_DLNADOC>DMR-1.50</dlna:X_DLNADOC><serviceList>");
         for (String s : SERVICES) x.append("<service><serviceType>").append(type(s)).append("</serviceType><serviceId>urn:upnp-org:serviceId:").append(s).append("</serviceId><SCPDURL>/service/").append(s).append(".xml</SCPDURL><controlURL>/control/").append(s).append("</controlURL><eventSubURL>/event/").append(s).append("</eventSubURL></service>");
         return x.append("</serviceList><presentationURL>/</presentationURL></device></root>").toString();
     }

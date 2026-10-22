@@ -10,8 +10,8 @@ android {
         applicationId 'cn.local.livingroomcast'
         minSdk 23
         targetSdk 35
-        versionCode 7
-        versionName '0.1.6-test'
+        versionCode 8
+        versionName '0.1.7-test'
         testInstrumentationRunner project.findProperty('nativeRunner') ?: 'cn.local.livingroomcast.QualityInstrumentation'
     }
     compileOptions { coreLibraryDesugaringEnabled true; sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }

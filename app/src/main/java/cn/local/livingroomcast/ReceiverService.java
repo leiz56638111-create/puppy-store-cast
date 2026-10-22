@@ -46,6 +46,10 @@ public final class ReceiverService extends Service implements Dlna.Controller {
     private String status = "正在启动接收服务", error = "", transportStatus = "OK";
     private Runnable observer;
     private String selectedQuality = "";
+    private float selectedSpeed = 1f;
+    public static final float[] PLAYBACK_SPEEDS = {0.5f, 0.75f, 1f, 1.25f, 1.5f, 2f};
+    public record Playback(int generation, long position, long duration, long buffered, long windowStart,
+                           boolean live, boolean canSeek, boolean canSpeed, boolean canGoLive, float speed) {}
     private int received, retries;
     private boolean desiredPlay, formatProbed, probing, pendingPresentation, shuttingDown;
     private int mediaGeneration;
@@ -98,6 +102,13 @@ public final class ReceiverService extends Service implements Dlna.Controller {
                 }
                 changed();
             }
+            @Override public void onTimelineChanged(Timeline timeline, int reason) {
+                if (player.isCurrentMediaItemLive() && !player.isCurrentMediaItemSeekable() && selectedSpeed != 1f) setSpeedInternal(1f);
+                changed();
+            }
+            @Override public void onAvailableCommandsChanged(Player.Commands commands) { changed(); }
+            @Override public void onPlaybackParametersChanged(PlaybackParameters parameters) { changed(); }
+            @Override public void onPositionDiscontinuity(Player.PositionInfo oldPosition, Player.PositionInfo newPosition, int reason) { changed(); }
             @Override public void onVideoSizeChanged(VideoSize videoSize) { changed(); }
             @Override public void onPlayerError(PlaybackException e) {
                 playingSince = 0;
@@ -145,6 +156,15 @@ public final class ReceiverService extends Service implements Dlna.Controller {
         @Override public void run() {
             if (!alive) return;
             if (playingSince > 0 && SystemClock.elapsedRealtime() - playingSince > 60000) retries = 0;
+            if (selectedSpeed > 1f && player.isPlaying() && player.isCurrentMediaItemLive()) {
+                Timeline timeline = player.getCurrentTimeline();
+                if (!timeline.isEmpty()) {
+                    long edge = timeline.getWindow(player.getCurrentMediaItemIndex(), new Timeline.Window()).getDefaultPositionMs();
+                    if (edge != C.TIME_UNSET && edge - player.getCurrentPosition() <= 1500) {
+                        setSpeedInternal(1f); log("已接近直播位置，恢复正常速度");
+                    }
+                }
+            }
             if (observer != null) observer.run();
             main.postDelayed(this, 1000);
         }
@@ -237,7 +257,7 @@ public final class ReceiverService extends Service implements Dlna.Controller {
                 try { parsed = new URI(uri); if(!List.of("http","https").contains(parsed.getScheme()) || parsed.getHost() == null || parsed.getUserInfo() != null) throw new IllegalArgumentException(); }
                 catch (Exception e) { throw new Dlna.Fault(714,"Only HTTP(S) media supported"); }
                 cancelRetry(); cancelFormatProbe(); retries = 0; formatProbed = false; sessionStarted = 0; playingSince = 0; desiredPlay = false; pendingPresentation = false;
-                selectedQuality = "";
+                selectedQuality = ""; setSpeedInternal(1f);
                 player.stop(); player.clearMediaItems(); resetQuality();
                 currentUri = uri; metadata = args.getOrDefault("CurrentURIMetaData", "");
                 String declared = MediaProbe.mime(Xml.resourceMime(metadata)); mime = MediaProbe.initialMime(uri,declared);
@@ -247,8 +267,10 @@ public final class ReceiverService extends Service implements Dlna.Controller {
                 if(!mime.equalsIgnoreCase(declared) && !mime.isEmpty()) log("按播放地址选择格式：" + mime);
                 break;
             case "Play":
-                if (!"1".equals(args.get("Speed"))) throw new Dlna.Fault(717,"Only normal speed supported");
+                float requestedSpeed = parseSpeed(args.get("Speed"));
                 if(currentUri.isEmpty()) throw new Dlna.Fault(701,"No media");
+                if (requestedSpeed != 1f && !playback().canSpeed()) throw new Dlna.Fault(717,"Speed unavailable for this source");
+                setSpeedInternal(requestedSpeed);
                 desiredPlay = true;
                 if (!ensurePresentation()) break;
                 foreground(true);
@@ -261,9 +283,11 @@ public final class ReceiverService extends Service implements Dlna.Controller {
             case "Stop": stopPlayback(); break;
             case "Seek":
                 if (!List.of("REL_TIME","ABS_TIME").contains(args.get("Unit"))) throw new Dlna.Fault(710,"Seek mode unsupported");
-                if (player.isCurrentMediaItemLive() || !player.isCurrentMediaItemSeekable()) throw new Dlna.Fault(710,"Live stream does not support seeking");
-                player.seekTo(Dlna.millis(args.get("Target"))); break;
-            case "GetTransportInfo": return Dlna.values("CurrentTransportState",transportState(),"CurrentTransportStatus",transportStatus,"CurrentSpeed","1");
+                long target = Dlna.millis(args.get("Target"));
+                Playback seek = playback();
+                if (!seek.canSeek() || !seekPlayback(seek.generation(), target, seek.windowStart())) throw new Dlna.Fault(710,"Source does not support seeking");
+                break;
+            case "GetTransportInfo": return Dlna.values("CurrentTransportState",transportState(),"CurrentTransportStatus",transportStatus,"CurrentSpeed",speedProtocol(selectedSpeed));
             case "GetPositionInfo": return Dlna.values("Track", currentUri.isEmpty()?"0":"1", "TrackDuration",duration(),"TrackMetaData",metadata,"TrackURI",currentUri,"RelTime",Dlna.time(player.getCurrentPosition()),"AbsTime",Dlna.time(player.getCurrentPosition()),"RelCount","2147483647","AbsCount","2147483647");
             case "GetMediaInfo": return Dlna.values("NrTracks",currentUri.isEmpty()?"0":"1","MediaDuration",duration(),"CurrentURI",currentUri,"CurrentURIMetaData",metadata,"NextURI","","NextURIMetaData","","PlayMedium","NETWORK","RecordMedium","NOT_IMPLEMENTED","WriteStatus","NOT_IMPLEMENTED");
             case "GetDeviceCapabilities": return Dlna.values("PlayMedia","NETWORK","RecMedia","NOT_IMPLEMENTED","RecQualityModes","NOT_IMPLEMENTED");
@@ -283,10 +307,10 @@ public final class ReceiverService extends Service implements Dlna.Controller {
         if(desiredPlay && player.getPlaybackState()==Player.STATE_BUFFERING) return "TRANSITIONING";
         return player.getPlayWhenReady()?"PLAYING":"PAUSED_PLAYBACK";
     }
-    private String transportActions() { return currentUri.isEmpty()?"":"Play,Stop,Pause" + (player.isCurrentMediaItemSeekable() && !player.isCurrentMediaItemLive()?",Seek":""); }
+    private String transportActions() { return currentUri.isEmpty()?"":"Play,Stop,Pause" + (playback().canSeek()?",Seek":""); }
     @Override public Map<String,String> event(String service) throws Exception {
         return onMain(() -> switch (service) {
-            case Dlna.AV -> Dlna.values("TransportState",transportState(),"TransportStatus",transportStatus,"TransportPlaySpeed","1","AVTransportURI",currentUri,"AVTransportURIMetaData",metadata,"CurrentTrackURI",currentUri,"CurrentTrackMetaData",metadata,"NumberOfTracks",currentUri.isEmpty()?"0":"1","CurrentTrack",currentUri.isEmpty()?"0":"1","CurrentTrackDuration",duration(),"CurrentMediaDuration",duration(),"CurrentTransportActions",transportActions());
+            case Dlna.AV -> Dlna.values("TransportState",transportState(),"TransportStatus",transportStatus,"TransportPlaySpeed",speedProtocol(selectedSpeed),"AVTransportURI",currentUri,"AVTransportURIMetaData",metadata,"CurrentTrackURI",currentUri,"CurrentTrackMetaData",metadata,"NumberOfTracks",currentUri.isEmpty()?"0":"1","CurrentTrack",currentUri.isEmpty()?"0":"1","CurrentTrackDuration",duration(),"CurrentMediaDuration",duration(),"CurrentTransportActions",transportActions());
             case Dlna.RC -> Dlna.values("Volume",Integer.toString(volume()),"Mute",audio.isStreamMute(AudioManager.STREAM_MUSIC)?"1":"0");
             default -> Dlna.values("SourceProtocolInfo","","SinkProtocolInfo",Dlna.PROTOCOLS,"CurrentConnectionIDs","0");
         });
@@ -348,14 +372,67 @@ public final class ReceiverService extends Service implements Dlna.Controller {
         return 0;
     }
     public void stopPlayback() {
-        desiredPlay=false; pendingPresentation=false; cancelRetry(); cancelFormatProbe(); selectedQuality=""; player.stop(); player.clearMediaItems(); resetQuality(); currentUri=""; metadata=""; title=""; mime="";
+        desiredPlay=false; pendingPresentation=false; cancelRetry(); cancelFormatProbe(); selectedQuality=""; setSpeedInternal(1f); player.stop(); player.clearMediaItems(); resetQuality(); currentUri=""; metadata=""; title=""; mime="";
         error=""; transportStatus="OK"; sessionStarted=0; playingSince=0; status=endpoint.isEmpty()?"接收服务未就绪":"等待平板投屏"; foreground(false); log("已结束播放，等待下一次投屏"); changed();
     }
     public void togglePause() {
         if(currentUri.isEmpty())return;
-        try { dispatch(Dlna.AV,desiredPlay?"Pause":"Play",Dlna.values("InstanceID","0","Speed","1")); } catch(Exception ignored) { }
+        try { dispatch(Dlna.AV,desiredPlay?"Pause":"Play",Dlna.values("InstanceID","0","Speed",speedProtocol(selectedSpeed))); } catch(Exception ignored) { }
     }
     public void reconnect() { if(currentUri.isEmpty())return; retries=0; desiredPlay=true; cancelRetry(); prepareCurrent(); }
+    /** A bounded window supplied by the actual source, never the TV's connection timer. */
+    public Playback playback() {
+        long duration = player.getDuration();
+        if (duration == C.TIME_UNSET || duration < 0) duration = 0;
+        boolean hasMedia = !currentUri.isEmpty() && !player.getCurrentTimeline().isEmpty();
+        boolean live = hasMedia && player.isCurrentMediaItemLive();
+        boolean seek = hasMedia && duration > 0 && player.isCurrentMediaItemSeekable()
+                && player.isCommandAvailable(Player.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM);
+        long start = 0;
+        if (hasMedia && live) {
+            Timeline.Window window = player.getCurrentTimeline().getWindow(player.getCurrentMediaItemIndex(), new Timeline.Window());
+            start = window.windowStartTimeMs != C.TIME_UNSET ? window.windowStartTimeMs : window.getPositionInFirstPeriodMs();
+        }
+        return new Playback(mediaGeneration, Math.max(0, player.getCurrentPosition()), duration,
+                Math.max(0, player.getBufferedPosition()), start, live, seek,
+                hasMedia && duration > 0 && (!live || seek) && player.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH),
+                live && player.isCommandAvailable(Player.COMMAND_SEEK_TO_DEFAULT_POSITION), selectedSpeed);
+    }
+    public boolean seekPlayback(int session, long position, long originalWindowStart) {
+        Playback current = playback();
+        if (session != mediaGeneration || !current.canSeek()) return false;
+        // Keep the selected broadcast instant when a DVR window slides during a drag.
+        long adjusted = position + (current.live() ? originalWindowStart - current.windowStart() : 0);
+        player.seekTo(Math.max(0, Math.min(current.duration(), adjusted)));
+        changed(); return true;
+    }
+    public boolean selectSpeed(int session, float value) {
+        if (session != mediaGeneration || !playback().canSpeed() || !validSpeed(value)) return false;
+        setSpeedInternal(value); log("播放速度：" + speedLabel(value)); changed(); return true;
+    }
+    public boolean goLive(int session) {
+        if (session != mediaGeneration || !playback().canGoLive()) return false;
+        setSpeedInternal(1f); player.seekToDefaultPosition(); changed(); return true;
+    }
+    public static String speedLabel(float speed) { return (speed == (int)speed ? Integer.toString((int)speed) : Float.toString(speed)) + "×"; }
+    private static boolean validSpeed(float value) { for (float speed : PLAYBACK_SPEEDS) if (speed == value) return true; return false; }
+    private static String speedProtocol(float speed) {
+        if (speed == .5f) return "1/2"; if (speed == .75f) return "3/4";
+        if (speed == 1.25f) return "5/4"; if (speed == 1.5f) return "3/2";
+        return speed == 2f ? "2" : "1";
+    }
+    private static float parseSpeed(String value) throws Dlna.Fault {
+        try {
+            String[] ratio = value.split("/", -1);
+            float speed = ratio.length == 2 ? Float.parseFloat(ratio[0]) / Float.parseFloat(ratio[1]) : Float.parseFloat(value);
+            if (ratio.length > 2 || !validSpeed(speed)) throw new IllegalArgumentException();
+            return speed;
+        } catch (Exception e) { throw new Dlna.Fault(717, "Unsupported playback speed"); }
+    }
+    private void setSpeedInternal(float speed) {
+        selectedSpeed = speed;
+        if (player.isCommandAvailable(Player.COMMAND_SET_SPEED_AND_PITCH)) player.setPlaybackSpeed(speed);
+    }
     public QualityMenu qualityMenu() {
         return new QualityMenu(mediaGeneration, qualityChoices(), selectedQuality, player.getCurrentTracks().isEmpty());
     }
