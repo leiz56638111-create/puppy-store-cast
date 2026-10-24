@@ -2,7 +2,7 @@
 
 一个用于安卓电视和安卓平板的轻量 DLNA 视频接收端。打开电视上的应用，在平板视频软件中点 TV / 投屏，选择“小狗便利店投屏”。iPhone／iPad 屏幕镜像可从主界面进入 AirPlay 镜像（测试）。
 
-最初用于家里的安卓平板向索尼电视投送直播。没有账号、广告、订阅收费或人为播放时长限制。当前分支为本地 **0.1.8-test 合并测试版**：保留 0.1.7 的 DLNA、触摸、进度条和倍速，增加 AirPlay 屏幕镜像测试入口；尚未上传 GitHub，目前公开下载仍为 **0.1.7-test**。
+最初用于家里的安卓平板向索尼电视投送直播。没有账号、广告、订阅收费或人为播放时长限制。当前公开测试版为 **0.1.8-test 合并版**：保留 DLNA、触摸、进度条和倍速，增加 AirPlay 屏幕镜像测试入口；一个安装包、一个启动图标，两种模式按需切换。
 
 ![等待投屏界面](docs/images/waiting.png)
 
@@ -40,7 +40,7 @@
 
 ## 安装与使用
 
-下载 [0.1.7-test 测试安装包](https://github.com/leiz56638111-create/puppy-store-cast/releases/download/v0.1.7-test/PuppyStoreCast-0.1.7-test.apk)，或查看 [发布说明、源码和校验值](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v0.1.7-test)。也可按下节自行编译。
+下载 [0.1.8-test 测试安装包](https://github.com/leiz56638111-create/puppy-store-cast/releases/download/v0.1.8-test/PuppyStoreCast-0.1.8-test.apk)，或查看 [发布说明、源码和校验值](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v0.1.8-test)。也可按下节自行编译。
 
 1. 把 APK 拷到 U 盘，通过电视文件管理器打开；按电视提示允许对应应用安装未知来源的软件。
 2. 安装并打开“小狗便利店投屏”，确认电视已联网。
@@ -63,7 +63,7 @@
 
 ![进度条与倍速控制](docs/images/playback-controls.png)
 
-## AirPlay 镜像（0.1.8-test，本地测试）
+## AirPlay 镜像（0.1.8-test）
 
 - 同一个安装包、同一个图标。从等待页点“AirPlay 镜像（测试）”，再在 iPhone／iPad 控制中心选择“屏幕镜像 → 小狗便利店投屏”。
 - 镜像模式暂停 DLNA；“返回视频投屏”断开镜像并恢复 DLNA。两种模式按需切换，不同时接收。Home／离开镜像界面停止 AirPlay；重新打开应用默认进入 DLNA。
@@ -72,7 +72,9 @@
 - AirPlay 请保持界面打开；原后台待机仅适用于 DLNA。不承诺视频 App 内 AirPlay 按钮、DRM、ALAC 音频、4K、低延迟游戏或完整苹果设备兼容。
 - 覆盖安装原主应用，不会自动合并或卸载历史独立镜像实验包；两者配对记录不同。测试合并版时请先退出独立镜像实验包。
 
-原生组件来源与 GPL／LGPL／Apache 等许可证见 [镜像模块来源](mirror/AIRPLAY-NOTICES.md)。详见 [0.1.8 本地说明](docs/0.1.8-test.md)。
+原生组件来源与 GPL／LGPL／Apache 等许可证见 [镜像模块来源](mirror/AIRPLAY-NOTICES.md)。详见 [0.1.8 发布说明](docs/0.1.8-test.md)。
+
+![AirPlay 镜像等待界面](docs/images/airplay-mirroring.png)
 
 ## 画质选择（0.1.4-test）
 
@@ -108,7 +110,7 @@ bash build-local.sh
 
 构建脚本会为缺少密钥的源码副本生成本地调试密钥。示例密码 `android` 是调试配置，不是生产环境凭据。
 
-公开的 0.1.7-test 安装包沿用此前版本的测试签名，与本地交付的 0.1.7-test 是同一文件；可以覆盖同包名、同签名的已有安装。仓库不包含该签名私钥。不同人自行编译的 APK 签名不同，不能直接覆盖彼此的安装；后续签名安排以各版本发布说明为准。当前本地 0.1.8-test 合并包仍沿用此签名，versionCode 9，可覆盖 0.1.7。
+公开的 0.1.8-test 安装包沿用此前版本的测试签名，与本地交付的 0.1.8-test 是同一文件；可以覆盖同包名、同签名的已有安装。仓库不包含该签名私钥。不同人自行编译的 APK 签名不同，不能直接覆盖彼此的安装；后续签名安排以各版本发布说明为准。0.1.8-test 合并包的 versionCode 为 9，可覆盖旧主版 0.1.7；历史独立镜像实验包不会被覆盖。
 
 ## 测试与参与
 
