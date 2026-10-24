@@ -10,4 +10,5 @@ if [ ! -f signing/test.keystore ]; then
   "$JAVA_HOME/bin/keytool" -genkeypair -keystore signing/test.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname 'CN=LivingRoomCast Test,O=Local Development,C=CN'
 fi
 printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties
-./gradlew --no-daemon assembleDebug lintDebug
+python3 mirror/tools/build-native-deps.py
+./gradlew --no-daemon :app:assembleDebug :app:lintDebug :mirror:lintDebug :mirror:testDebugUnitTest

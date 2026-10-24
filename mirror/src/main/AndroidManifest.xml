@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- DLNA still installs on API 23; the host guards this optional API 24+ feature. -->
+    <application>
+        <activity android:name="com.airtv.receiver.ui.MainActivity" android:exported="false"
+            android:screenOrientation="landscape" android:configChanges="orientation|screenSize|keyboardHidden|navigation"
+            android:theme="@style/Theme.AirTV" />
+        <service android:name="com.airtv.receiver.service.AirPlayService" android:exported="false"
+            android:foregroundServiceType="connectedDevice|mediaPlayback" />
+    </application>
+</manifest>

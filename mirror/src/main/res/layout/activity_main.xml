@@ -1,0 +1,15 @@
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android" android:layout_width="match_parent" android:layout_height="match_parent" android:background="@color/background">
+<SurfaceView android:id="@+id/surface" android:layout_width="match_parent" android:layout_height="match_parent" android:focusable="false" android:contentDescription="镜像画面，点击查看操作" />
+<ScrollView android:id="@+id/overlay" android:layout_width="match_parent" android:layout_height="match_parent" android:fillViewport="true" android:background="@color/background">
+<LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="vertical" android:gravity="center" android:padding="24dp">
+<TextView android:id="@+id/title" android:layout_width="wrap_content" android:layout_height="wrap_content" android:text="小狗便利店投屏 · AirPlay 镜像实验" android:textColor="@color/accent" android:textSize="22sp" android:textStyle="bold" android:gravity="center" />
+<TextView android:id="@+id/status" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:text="@string/status_starting" android:textColor="@color/foreground" android:textSize="28sp" android:gravity="center" />
+<TextView android:id="@+id/details" android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="16dp" android:textColor="@color/muted" android:textSize="17sp" android:gravity="center" />
+<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="20dp" android:text="@string/hint" android:textColor="@color/foreground" android:textSize="18sp" android:gravity="center" />
+<HorizontalScrollView android:layout_width="match_parent" android:layout_height="wrap_content" android:fillViewport="true" android:layout_marginTop="18dp"><LinearLayout android:layout_width="wrap_content" android:layout_height="wrap_content" android:gravity="center" android:orientation="horizontal">
+<Button android:id="@+id/restart" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minHeight="48dp" android:text="重新接收" />
+<Button android:id="@+id/diagnostics" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minHeight="48dp" android:layout_marginStart="12dp" android:text="连接详情" />
+<Button android:id="@+id/exit" android:layout_width="wrap_content" android:layout_height="wrap_content" android:minHeight="48dp" android:layout_marginStart="12dp" android:text="返回视频投屏" />
+</LinearLayout></HorizontalScrollView>
+<TextView android:layout_width="wrap_content" android:layout_height="wrap_content" android:layout_marginTop="14dp" android:text="AirPlay 测试模式 · 请保持界面打开 · 返回后恢复视频投屏" android:textColor="@color/muted" android:textSize="13sp" android:gravity="center" />
+</LinearLayout></ScrollView></FrameLayout>

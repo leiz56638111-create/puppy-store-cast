@@ -1,0 +1,12 @@
+<resources>
+<string name="app_name">小狗便利店投屏</string>
+<string name="notification_channel_name">屏幕镜像实验接收</string>
+<string name="status_starting">正在启动镜像接收…</string>
+<string name="status_ready">等待屏幕镜像：%1$s</string>
+<string name="status_streaming">正在接收 %1$s 的屏幕镜像</string>
+<string name="status_audio_only">收到 %1$s 的音频连接</string>
+<string name="status_audio_only_detail">请从控制中心选择“屏幕镜像”。</string>
+<string name="status_audio_unsupported">收到 %1$s 的 %2$s 音频</string>
+<string name="status_audio_unsupported_detail">本实验版请使用“屏幕镜像”。</string>
+<string name="hint">iPhone／iPad 控制中心 → 屏幕镜像</string>
+</resources>

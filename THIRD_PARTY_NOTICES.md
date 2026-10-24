@@ -34,3 +34,7 @@ This source distribution does not contain an Android SDK, JDK, Gradle distributi
 The README screenshot was captured from this application's Android emulator. Automated core tests use synthetic data and example.invalid URLs, not real platform access tokens. No third-party programme content or live-stream lists are included.
 
 DLNA / UPnP describe interoperability protocols here, not certification or sponsorship. Mentions of Sony, Z视介, 小红书 and 抖音 document limited user-reported compatibility; this project is not affiliated with those products.
+
+## Optional mirror experiment module
+
+The optional `mirror` Android library, integrated into the combined application, reuses AirTV / UxPlay-derived code and links OpenSSL 3.0.22 and libplist 2.6.0 rebuilt from the bundled pinned upstream sources. Its codecs run only in foreground AirPlay mode; the DLNA mode retains its existing player. Source provenance, modifications, component licenses and source archives are documented in [mirror/AIRPLAY-NOTICES.md](mirror/AIRPLAY-NOTICES.md).

@@ -1,8 +1,8 @@
 # 小狗便利店投屏
 
-一个用于安卓电视和安卓平板的轻量 DLNA 视频接收端。打开电视上的应用，在平板视频软件中点 TV / 投屏，选择“小狗便利店投屏”。
+一个用于安卓电视和安卓平板的轻量 DLNA 视频接收端。打开电视上的应用，在平板视频软件中点 TV / 投屏，选择“小狗便利店投屏”。iPhone／iPad 屏幕镜像可从主界面进入 AirPlay 镜像（测试）。
 
-最初用于家里的安卓平板向索尼电视投送直播。没有账号、广告、订阅收费或人为播放时长限制。当前公开测试版为 **0.1.7-test**，新增平板触摸控制、可拖动进度条和六档播放速度。
+最初用于家里的安卓平板向索尼电视投送直播。没有账号、广告、订阅收费或人为播放时长限制。当前分支为本地 **0.1.8-test 合并测试版**：保留 0.1.7 的 DLNA、触摸、进度条和倍速，增加 AirPlay 屏幕镜像测试入口；尚未上传 GitHub，目前公开下载仍为 **0.1.7-test**。
 
 ![等待投屏界面](docs/images/waiting.png)
 
@@ -34,7 +34,7 @@
 - 打开一次后，按 Home / 进入后台仍可等待投屏；选择“退出接收”才停止服务。没有开机启动，关机、重启、强行停止后需重新打开。
 - 自动打开播放界面需要在“后台待机”中允许“显示在其他应用上层”；未授权或系统阻止时需手动打开本应用。离开正在播放的界面会结束当前播放，避免后台只有声音。
 - 系统或电视厂商仍可能回收后台服务；不保证关屏、深度休眠或清理任务后始终在线。
-- 暂不支持 AirPlay、Miracast、屏幕镜像、乐联私有协议或跨网投屏。
+- 新增可选 AirPlay 屏幕镜像测试模式；仍不支持 Miracast、Chromecast、乐联私有协议或跨网投屏。
 - 不支持 DRM、需要接收端登录或额外私有请求头的播放链路。地址过期通常需要重新投屏。
 - 局域网控制没有配对认证，请在可信的家庭网络中使用，不要将接收端口映射到公网。
 
@@ -59,9 +59,20 @@
 - 播放速度提供 0.5×、0.75×、1×、1.25×、1.5×、2×。本机暂停／继续保留所选速度；新投屏、结束投屏恢复 1×。直播回看使用快倍速追上当前直播位置时恢复 1×；倍速不能提前播放尚未播出的内容。
 - 新投屏使旧进度拖动和倍速菜单失效，避免误操作新视频。后台待机和原画质逻辑保留；真实 App 单档清晰度问题仍暂缓。
 
-本轮不包含 AirPlay、IJK 或 Chromecast。索尼电视及安卓平板的实际触摸、声画同步和长时间使用仍需分别验收。
+0.1.7 触摸／进度／倍速仅作用于 DLNA 视频；0.1.8 增加独立的 AirPlay 镜像模式，不把 DLNA 播放控制套用到实时镜像。尚不支持 IJK 或 Chromecast。索尼电视及安卓平板的实际触摸、声画同步和长时间使用仍需分别验收。
 
 ![进度条与倍速控制](docs/images/playback-controls.png)
+
+## AirPlay 镜像（0.1.8-test，本地测试）
+
+- 同一个安装包、同一个图标。从等待页点“AirPlay 镜像（测试）”，再在 iPhone／iPad 控制中心选择“屏幕镜像 → 小狗便利店投屏”。
+- 镜像模式暂停 DLNA；“返回视频投屏”断开镜像并恢复 DLNA。两种模式按需切换，不同时接收。Home／离开镜像界面停止 AirPlay；重新打开应用默认进入 DLNA。
+- AirPlay 请求最高 1080p／30fps，保持来源比例；保留 alpha2 的音频重建、呈现节奏修正、连接详情及“恢复声音”。这些修复是否解决用户真机无声／加速反馈仍需复测。
+- DLNA 继续最低 Android 6.0；AirPlay 需要 Android 7.0 及以上 ARM 设备。本合并 APK 提供 arm64-v8a、armeabi-v7a；Android 6.0 入口仅显示说明，不加载镜像原生引擎。
+- AirPlay 请保持界面打开；原后台待机仅适用于 DLNA。不承诺视频 App 内 AirPlay 按钮、DRM、ALAC 音频、4K、低延迟游戏或完整苹果设备兼容。
+- 覆盖安装原主应用，不会自动合并或卸载历史独立镜像实验包；两者配对记录不同。测试合并版时请先退出独立镜像实验包。
+
+原生组件来源与 GPL／LGPL／Apache 等许可证见 [镜像模块来源](mirror/AIRPLAY-NOTICES.md)。详见 [0.1.8 本地说明](docs/0.1.8-test.md)。
 
 ## 画质选择（0.1.4-test）
 
@@ -81,7 +92,7 @@
 
 ## 从源码构建
 
-需要 JDK 17 或 21、Android SDK Platform 36、Build Tools 35.0.0，以及首次下载依赖所需的网络。工程带 Gradle 8.13 Wrapper，不需要全局安装 Gradle。
+需要 JDK 17 或 21、Python 3.12+、Android SDK Platform 36、Build Tools 35.0.0、NDK 28.2.13676358、CMake 3.22.1、make、Perl，以及首次下载依赖所需的网络。工程带 Gradle 8.13 Wrapper，不需要全局安装 Gradle。
 
 macOS / Linux：设置 `JAVA_HOME` 和 `ANDROID_HOME` 后执行：
 
@@ -89,17 +100,7 @@ macOS / Linux：设置 `JAVA_HOME` 和 `ANDROID_HOME` 后执行：
 bash build-local.sh
 ```
 
-Windows PowerShell：设置上述环境变量后，在工程根目录执行：
-
-```powershell
-New-Item -ItemType Directory -Force signing | Out-Null
-if (!(Test-Path signing/test.keystore)) {
-  & "$env:JAVA_HOME/bin/keytool.exe" -genkeypair -keystore signing/test.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=LivingRoomCast Test,O=Local Development,C=CN"
-}
-.\gradlew.bat --no-daemon assembleDebug lintDebug
-```
-
-Windows 路径仅提供操作说明，尚未在 Windows 真机验证。也可使用 Android Studio 打开工程、选择 SDK，并按上述方式生成本地测试密钥。
+合并版目前仅验证 macOS 构建，原生依赖脚本支持 macOS／Linux 的 NDK 工具链布局；Windows 构建仍待适配。历史纯 DLNA 的 Windows 说明见 v0.1.7-test 标签。
 
 输出为 `app/build/outputs/apk/debug/app-debug.apk`。
 
@@ -107,7 +108,7 @@ Windows 路径仅提供操作说明，尚未在 Windows 真机验证。也可使
 
 构建脚本会为缺少密钥的源码副本生成本地调试密钥。示例密码 `android` 是调试配置，不是生产环境凭据。
 
-公开的 0.1.7-test 安装包沿用此前版本的测试签名，与本地交付的 0.1.7-test 是同一文件；可以覆盖同包名、同签名的已有安装。仓库不包含该签名私钥。不同人自行编译的 APK 签名不同，不能直接覆盖彼此的安装；后续签名安排以各版本发布说明为准。
+公开的 0.1.7-test 安装包沿用此前版本的测试签名，与本地交付的 0.1.7-test 是同一文件；可以覆盖同包名、同签名的已有安装。仓库不包含该签名私钥。不同人自行编译的 APK 签名不同，不能直接覆盖彼此的安装；后续签名安排以各版本发布说明为准。当前本地 0.1.8-test 合并包仍沿用此签名，versionCode 9，可覆盖 0.1.7。
 
 ## 测试与参与
 

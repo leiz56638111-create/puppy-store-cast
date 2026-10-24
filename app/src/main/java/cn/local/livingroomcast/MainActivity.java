@@ -25,7 +25,7 @@ public final class MainActivity extends Activity {
     private static final int INK = Color.rgb(16,27,32), MINT = Color.rgb(140,232,195), WHITE = Color.rgb(239,246,243), MUTED = Color.rgb(173,193,193);
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ReceiverService service;
-    private boolean bound, video;
+    private boolean bound, video, switchingMirror;
     private PlayerView playerView;
     private LinearLayout waiting, hud;
     private ScrollView waitingPane;
@@ -67,7 +67,7 @@ public final class MainActivity extends Activity {
         waitingPane = new ScrollView(this); waitingPane.setFillViewport(true);
         waitingPane.addView(waiting, new ScrollView.LayoutParams(-1,-2));
         root.addView(waitingPane,new FrameLayout.LayoutParams(-1,-1));
-        TextView eyebrow = text("LIVING ROOM  /  投屏接收 0.1.7",12,MINT); eyebrow.setLetterSpacing(.10f); waiting.addView(eyebrow);
+        TextView eyebrow = text("LIVING ROOM  /  投屏接收 0.1.8",12,MINT); eyebrow.setLetterSpacing(.10f); waiting.addView(eyebrow);
         TextView title = text("小狗便利店投屏",getResources().getConfiguration().screenWidthDp < 700 ? 28 : 36,WHITE); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD); add(waiting,title,12);
         TextView instruction = text("在平板的软件中点TV/投屏，选择“小狗便利店投屏”",19,WHITE); add(waiting,instruction,9);
         network = text("正在检查本机网络…",14,MUTED); add(waiting,network,13);
@@ -82,6 +82,8 @@ public final class MainActivity extends Activity {
         Button details=button("连接详情",v->details()); LinearLayout.LayoutParams detailParams=new LinearLayout.LayoutParams(-2,dp(48)); detailParams.leftMargin=dp(12); buttons.addView(details,detailParams);
         Button exit=button("退出接收",v->confirmExit()); LinearLayout.LayoutParams exitParams=new LinearLayout.LayoutParams(-2,dp(48)); exitParams.leftMargin=dp(12); buttons.addView(exit,exitParams);
         waiting.addView(scrollControls(buttons));
+        Button mirror=button("AirPlay 镜像（测试）",v->openMirror()); add(waiting,mirror,12);
+        add(waiting,text("iPhone／iPad：先进入 AirPlay 模式，再从控制中心选择屏幕镜像。",13,MUTED),6);
         TextView note=text("按 Home 可后台待机；“退出接收”会停止服务。自动打开新投屏可在“后台待机”中授权。",12,MUTED); add(waiting,note,8);
 
         hud=column(); hud.setPadding(dp(20),dp(12),dp(20),dp(12)); hud.setBackgroundColor(0x99081016);
@@ -130,6 +132,14 @@ public final class MainActivity extends Activity {
     @Override protected void onStart() {
         super.onStart();
         handler.post(progressTick);
+    }
+    @Override protected void onResume() {
+        super.onResume();
+        switchingMirror=false;
+        // A rapid round trip can pause/resume without stopping/starting this activity.
+        // Rebind here as well, instead of relying on onStart to restore DLNA.
+        if(bound)return;
+        stopService(new Intent().setClassName(this,"com.airtv.receiver.service.AirPlayService"));
         Intent intent=new Intent(this,ReceiverService.class);
         try {
             if(Build.VERSION.SDK_INT>=26)startForegroundService(intent); else startService(intent);
@@ -284,7 +294,7 @@ public final class MainActivity extends Activity {
         String message="等待接收服务启动。";
         if(service!=null) {
             ReceiverService.Ui u=service.ui();
-            message="小狗便利店投屏 0.1.7-test\n电视：" + Build.MANUFACTURER + " " + Build.MODEL + "\nAndroid " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT
+            message="小狗便利店投屏 0.1.8-test\n电视：" + Build.MANUFACTURER + " " + Build.MODEL + "\nAndroid " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT
                     + "\n接收器：" + (u.endpoint().isEmpty()?"尚未就绪":u.endpoint())
                     + "\n当前画质：" + u.quality() + " · " + u.qualityMode()
                     + "\n播放速度：" + ReceiverService.speedLabel(service.playback().speed())
@@ -297,6 +307,30 @@ public final class MainActivity extends Activity {
         modalDialog=dialog;
         dialog.setOnDismissListener(d->{if(modalDialog==dialog)modalDialog=null;showHud();}); dialog.show();
         fitDialog(dialog,660,390);
+    }
+    private void openMirror() {
+        if(switchingMirror)return;
+        if(!com.airtv.receiver.airplay.MirrorSupport.isSupported(Build.VERSION.SDK_INT,Build.SUPPORTED_ABIS)) {
+            new AlertDialog.Builder(this).setTitle("AirPlay 镜像暂不可用")
+                .setMessage("AirPlay 测试功能需要 Android 7.0 及以上的 ARM 设备；本机仍可使用视频 App 的 TV／投屏接收。")
+                .setPositiveButton("知道了",null).show();return;
+        }
+        switchingMirror=true;
+        try {
+            // Detach before shutdown: shutdown's observer would otherwise finish this
+            // host activity, leaving no DLNA screen to return to.
+            if(service!=null) {service.observe(null);playerView.setPlayer(null);service.stopPlayback();}
+            if(bound){unbindService(connection);bound=false;}
+            service=null;
+            stopService(new Intent(this,ReceiverService.class));
+            startActivity(new Intent().setClassName(this,"com.airtv.receiver.ui.MainActivity"));
+        } catch(RuntimeException e) {
+            switchingMirror=false;
+            Toast.makeText(this,"无法打开 AirPlay 镜像，已返回视频投屏。",Toast.LENGTH_LONG).show();
+            Intent intent=new Intent(this,ReceiverService.class);
+            if(Build.VERSION.SDK_INT>=26)startForegroundService(intent);else startService(intent);
+            bound=bindService(intent,connection,BIND_AUTO_CREATE);
+        }
     }
     private void exitReceiver() {
         if(service!=null)service.shutdown();

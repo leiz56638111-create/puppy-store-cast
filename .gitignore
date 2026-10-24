@@ -21,3 +21,9 @@ verification/
 *.log
 .env
 .env.*
+
+**/.cxx/
+mirror/.native-build/
+mirror/src/main/cpp/prebuilt/
+
+.kotlin/
