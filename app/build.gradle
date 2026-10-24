@@ -6,6 +6,7 @@ plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
 android {
     namespace 'cn.local.livingroomcast'
     compileSdk 36
+    ndkVersion '28.2.13676358'
     defaultConfig {
         applicationId 'cn.local.livingroomcast'
         minSdk 23

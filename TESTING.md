@@ -107,3 +107,5 @@ adb shell am instrument -w cn.local.livingroomcast.test/cn.local.livingroomcast.
 主应用最低 API 23；镜像库依赖 API 24 ARM 原生组件，由宿主入口与镜像 Activity 的运行条件检查保护。API 23 保护仅单元验证，Android 6.0 与 32 位 ARM 实际运行待测。两种接收模式不同时运行；AirPlay 仍限前台，后台待机为 DLNA 能力。
 
 较小触摸屏 960×540、density 240 下另复测 3 个合并生命周期／模式检查与 61 个播放控制检查。主等待页通过原 ScrollView 保留完整入口，小屏需向下滚动显示 AirPlay 按钮；镜像横向按钮行也可滚动。
+
+最终打包给宿主显式指定与镜像库相同的 NDK 28.2.13676358，移除原生调试信息中的本机路径。两个 ABI 去除调试信息前后所有 SHF_ALLOC 段（实际加载的代码与数据）一致；最终 APK 另重跑镜像／模式与播放控制检查，交付校验拒绝本机路径或签名私钥。
