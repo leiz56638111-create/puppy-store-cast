@@ -7,3 +7,5 @@ rootProject.name = 'LivingRoomCast'
 include ':app'
 
 include ':mirror'
+
+include ':direct'

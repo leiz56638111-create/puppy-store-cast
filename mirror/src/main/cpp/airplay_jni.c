@@ -8,6 +8,8 @@
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <errno.h>
 
 #include "dnssd.h"
 #include "global.h"
@@ -27,6 +29,16 @@ static jobject g_cb = NULL; /* global ref to the Kotlin AirPlayCallbacks object 
 static raop_t *g_raop = NULL;
 static dnssd_t *g_dnssd = NULL;
 static unsigned short g_port = 0;
+static int g_video_enabled = 0;
+static pthread_mutex_t g_video_lock = PTHREAD_MUTEX_INITIALIZER;
+static playback_info_t g_video_info;
+static pthread_cond_t g_video_ready_cond=PTHREAD_COND_INITIALIZER;
+static int g_video_shutdown=0;
+static jlong g_video_ticket = 0;
+static double g_video_buffered = 0;
+static jlong video_ticket(void) {
+    pthread_mutex_lock(&g_video_lock); jlong value = g_video_ticket; pthread_mutex_unlock(&g_video_lock); return value;
+}
 
 /* clock: AirPlay timestamps are remote NTP nanoseconds; normalise to a session base */
 static uint64_t g_clock_offset = 0;
@@ -50,6 +62,7 @@ static struct {
     jmethodID onAudioData;
     jmethodID onAudioFlush;
     jmethodID onVolume;
+    jmethodID onRemoteVideoPlay, onRemoteVideoSeek, onRemoteVideoRate, onRemoteVideoStop;
 } M;
 
 static void detach_current_thread(void *value) {
@@ -110,6 +123,7 @@ static void reset_clock(void) {
 
 static void cb_log(void *cls, int level, const char *msg) {
     (void) cls;
+    if(g_video_enabled && msg && (strstr(msg,"http://") || strstr(msg,"https://") || strstr(msg,"Authorization"))) return;
     int prio = ANDROID_LOG_INFO;
     switch (level) {
         case LOGGER_ERR: prio = ANDROID_LOG_ERROR; break;
@@ -281,20 +295,52 @@ static void cb_report_client_request(void *cls, char *deviceid, char *model, cha
     if (admit) *admit = (ok == JNI_TRUE);
 }
 
-/* HLS / AirPlay-video callbacks: some call sites are not NULL-guarded, so provide
- * no-op stubs even though the advertised features disable that path. */
+/* Direct-video bridge. The native network thread reads a pushed snapshot; it never
+ * waits for Android's main thread while answering playback-info. */
 static void cb_on_video_play(void *cls, const char *location, const float start_position) {
-    (void) cls; (void) start_position;
-    LOGI("unsupported in-app video request; use Screen Mirroring");
-}
-static void cb_on_video_scrub(void *cls, const float position) { (void) cls; (void) position; }
-static void cb_on_video_rate(void *cls, const float rate) { (void) cls; (void) rate; }
-static void cb_on_video_stop(void *cls) { (void) cls; call_void(M.onVideoStop); }
-static void cb_on_video_acquire_playback_info(void *cls, playback_info_t *info) {
     (void) cls;
-    if (info) memset(info, 0, sizeof(*info));
+    if (!g_video_enabled || !location) return;
+    pthread_mutex_lock(&g_video_lock);
+    jlong ticket = ++g_video_ticket;
+    memset(&g_video_info, 0, sizeof(g_video_info));
+    g_video_info.position = start_position; g_video_buffered = 0;
+    pthread_mutex_unlock(&g_video_lock);
+    JNIEnv *env = get_env(); if (!env || !g_cb) return;
+    jstring url = (*env)->NewStringUTF(env, location);
+    (*env)->CallVoidMethod(env, g_cb, M.onRemoteVideoPlay, url, (jfloat) start_position, ticket);
+    (*env)->DeleteLocalRef(env, url); clear_exception(env);
 }
-static float cb_on_video_playlist_remove(void *cls) { (void) cls; return 0.0f; }
+static void cb_on_video_wait_ready(void *cls) {
+    (void)cls;if(!g_video_enabled)return;
+    struct timespec until;clock_gettime(CLOCK_REALTIME,&until);until.tv_sec+=5;
+    pthread_mutex_lock(&g_video_lock);
+    while(!g_video_info.ready_to_play && !g_video_shutdown) {
+        if(pthread_cond_timedwait(&g_video_ready_cond,&g_video_lock,&until)==ETIMEDOUT)break;
+    }
+    pthread_mutex_unlock(&g_video_lock);
+}
+static void cb_on_video_scrub(void *cls, const float position) {
+    (void) cls; JNIEnv *env = get_env();
+    if (g_video_enabled && env && g_cb) { (*env)->CallVoidMethod(env, g_cb, M.onRemoteVideoSeek, position, video_ticket()); clear_exception(env); }
+}
+static void cb_on_video_rate(void *cls, const float rate) {
+    (void) cls; JNIEnv *env = get_env();
+    if (g_video_enabled && env && g_cb) { (*env)->CallVoidMethod(env, g_cb, M.onRemoteVideoRate, rate, video_ticket()); clear_exception(env); }
+}
+static void cb_on_video_stop(void *cls) {
+    (void) cls;
+    if (!g_video_enabled) { call_void(M.onVideoStop); return; }
+    JNIEnv *env = get_env();
+    jlong ticket = video_ticket();
+    if (env && g_cb) { (*env)->CallVoidMethod(env, g_cb, M.onRemoteVideoStop, ticket); clear_exception(env); }
+}
+static void cb_on_video_acquire_playback_info(void *cls, playback_info_t *info) {
+    (void) cls; if (!info) return;
+    pthread_mutex_lock(&g_video_lock); *info = g_video_info; pthread_mutex_unlock(&g_video_lock);
+}
+static float cb_on_video_playlist_remove(void *cls) {
+    (void) cls; pthread_mutex_lock(&g_video_lock); float value = (float)g_video_info.position; pthread_mutex_unlock(&g_video_lock); return value;
+}
 
 /* ------------------------------------------------------------------ JNI entry */
 
@@ -323,12 +369,23 @@ static int cache_methods(JNIEnv *env, jobject cb) {
     GET(onAudioData, "onAudioData", "(Ljava/nio/ByteBuffer;IJ)V")
     GET(onAudioFlush, "onAudioFlush", "()V")
     GET(onVolume, "onVolume", "(F)V")
+    GET(onRemoteVideoPlay, "onRemoteVideoPlay", "(Ljava/lang/String;FJ)V")
+    GET(onRemoteVideoSeek, "onRemoteVideoSeek", "(FJ)V")
+    GET(onRemoteVideoRate, "onRemoteVideoRate", "(FJ)V")
+    GET(onRemoteVideoStop, "onRemoteVideoStop", "(J)V")
 #undef GET
     (*env)->DeleteLocalRef(env, c);
     return 0;
 }
 
 static void set_airplay_features(dnssd_t *dnssd) {
+    if (g_video_enabled) {
+        // Video and HLS, no photo, screen-mirror, or protected-video capability promise.
+        const int bits[] = {0,4,9,12,14,16,17,18,19,20,21,22,25,27,28,30};
+        for(int i=0;i<64;i++) dnssd_set_airplay_features(dnssd,i,0);
+        for(size_t i=0;i<sizeof(bits)/sizeof(bits[0]);i++)dnssd_set_airplay_features(dnssd,bits[i],1);
+        return;
+    }
     /* Mirroring + audio receiver with FairPlay auth; AirPlay-video/HLS is off. */
     static const int bits_on[] = {1, 2, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15,
                                   16, 17, 18, 19, 20, 21, 22, 25, 27, 28, 30};
@@ -400,6 +457,7 @@ Java_com_airtv_receiver_airplay_NativeAirPlay_nativeStart(
     cbs.video_set_codec = cb_video_set_codec;
     cbs.report_client_request = cb_report_client_request;
     cbs.on_video_play = cb_on_video_play;
+    cbs.on_video_wait_ready = cb_on_video_wait_ready;
     cbs.on_video_scrub = cb_on_video_scrub;
     cbs.on_video_rate = cb_on_video_rate;
     cbs.on_video_stop = cb_on_video_stop;
@@ -428,6 +486,7 @@ Java_com_airtv_receiver_airplay_NativeAirPlay_nativeStart(
     raop_set_plist(g_raop, "refreshRate", fps);
     raop_set_plist(g_raop, "maxFPS", fps);
     raop_set_plist(g_raop, "overscanned", 0);
+    raop_set_plist(g_raop, "hls", g_video_enabled);
 
     unsigned short tcp[3] = {0, 0, 0};
     unsigned short udp[3] = {0, 0, 0};
@@ -498,6 +557,7 @@ done:
 JNIEXPORT void JNICALL
 Java_com_airtv_receiver_airplay_NativeAirPlay_nativeStop(JNIEnv *env, jclass clazz) {
     (void) clazz;
+    pthread_mutex_lock(&g_video_lock);g_video_shutdown=1;pthread_cond_broadcast(&g_video_ready_cond);pthread_mutex_unlock(&g_video_lock);
     if (g_dnssd) {
         dnssd_unregister_raop(g_dnssd);
         dnssd_unregister_airplay(g_dnssd);
@@ -524,4 +584,26 @@ Java_com_airtv_receiver_airplay_NativeAirPlay_nativeIsRunning(JNIEnv *env, jclas
     (void) env;
     (void) clazz;
     return g_raop != NULL ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT void JNICALL
+Java_com_airtv_receiver_airplay_NativeAirPlay_nativeConfigureVideo(JNIEnv *env, jclass clazz, jboolean enabled) {
+    (void)env;(void)clazz;
+    if(g_raop) return;
+    g_video_enabled = enabled == JNI_TRUE;g_video_shutdown=0;
+    pthread_mutex_lock(&g_video_lock); ++g_video_ticket; memset(&g_video_info,0,sizeof(g_video_info));g_video_buffered=0;pthread_mutex_unlock(&g_video_lock);
+}
+JNIEXPORT void JNICALL
+Java_com_airtv_receiver_airplay_NativeAirPlay_nativeUpdateVideoState(JNIEnv *env,jclass clazz,jlong ticket,
+        jdouble position,jdouble duration,jdouble buffered,jfloat rate,jboolean ready,jboolean buffering,jboolean seekable) {
+    (void)env;(void)clazz;
+    pthread_mutex_lock(&g_video_lock);
+    if(ticket == g_video_ticket) {
+        g_video_info.position=position; g_video_info.duration=duration; g_video_info.buffered=buffered; g_video_info.rate=rate;
+        g_video_info.ready_to_play=ready;g_video_info.playback_buffer_empty=buffering;
+        g_video_info.playback_buffer_full=!buffering;g_video_info.playback_likely_to_keep_up=ready && !buffering;
+        g_video_info.seek_start=0;g_video_info.seek_duration=seekable?duration:0;g_video_buffered=buffered;
+        pthread_cond_broadcast(&g_video_ready_cond);
+    }
+    pthread_mutex_unlock(&g_video_lock);
 }

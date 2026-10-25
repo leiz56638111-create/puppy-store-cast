@@ -1,0 +1,114 @@
+// SPDX-License-Identifier: GPL-3.0-only
+package cn.local.livingroomcast.direct
+
+import android.app.*
+import android.content.*
+import android.net.wifi.WifiManager
+import android.os.*
+import android.provider.Settings
+import androidx.media3.common.*
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.airtv.receiver.airplay.*
+import java.io.File
+import java.net.Inet4Address
+import java.net.NetworkInterface
+import java.nio.ByteBuffer
+
+@androidx.annotation.OptIn(markerClass=[androidx.media3.common.util.UnstableApi::class])
+class DirectService: Service(), AirPlayCallbacks {
+    inner class LocalBinder: Binder() { val service get()=this@DirectService }
+    private val binder=LocalBinder()
+    private val main=Handler(Looper.getMainLooper())
+    lateinit var player: ExoPlayer; private set
+    var status="正在启动视频直投接收"; private set
+    var port=0; private set
+    var requests=0; private set
+    var hasMedia=false; private set
+    var ticket=0L; private set
+    var sourceKind="尚未收到视频"; private set
+    var frameShown=false; private set
+    private var alive=false
+    private var multicast: WifiManager.MulticastLock?=null
+    private val events=ArrayDeque<String>()
+    var observer:(()->Unit)?=null
+    val name="小狗便利店投屏·直投测试"
+    val address: String get()=runCatching { NetworkInterface.getNetworkInterfaces().asSequence().filter { it.isUp && !it.isLoopback }.flatMap { it.inetAddresses.asSequence() }.filterIsInstance<Inet4Address>().firstOrNull { !it.isLinkLocalAddress }?.hostAddress }.getOrNull()?:"未取得局域网地址"
+    val diagnostic: String get()=buildString {
+        append("视频直投实验版 0.3.0-video-alpha1\n${Build.MANUFACTURER} ${Build.MODEL}\nAndroid ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n")
+        append("地址 $address:$port\n播放请求 $requests 次\n来源 $sourceKind\n状态 $status\n")
+        append("画面 ${player.videoSize.width}×${player.videoSize.height}\n首帧 ${if(frameShown) "已显示" else "未显示"}\n")
+        append("\n"+events.joinToString("\n"))
+        append("\n\n记录只保存在本次运行内存，不显示完整视频地址或授权信息。实际 App 兼容性需要逐个测试。")
+    }
+    private fun event(text:String) { if(!alive)return;events.addLast(text);while(events.size>18)events.removeFirst();observer?.invoke() }
+    override fun onCreate() {
+        super.onCreate();alive=true
+        if(Build.VERSION.SDK_INT>=26)getSystemService(NotificationManager::class.java).createNotificationChannel(NotificationChannel("direct_video","AirPlay 视频直投测试",NotificationManager.IMPORTANCE_LOW))
+        val open=PendingIntent.getActivity(this,0,Intent(this,DirectActivity::class.java),PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val notification=(if(Build.VERSION.SDK_INT>=26) Notification.Builder(this,"direct_video") else @Suppress("DEPRECATION") Notification.Builder(this))
+            .setSmallIcon(android.R.drawable.stat_sys_upload).setContentTitle("小狗便利店投屏·视频直投测试").setContentText("保持界面打开，等待 App 内 AirPlay").setContentIntent(open).setOngoing(true).build()
+        startForeground(43,notification)
+        player=ExoPlayer.Builder(this).setMediaSourceFactory(DefaultMediaSourceFactory(DefaultHttpDataSource.Factory().setUserAgent("PuppyCast-AirPlay-Video-Test/0.3").setAllowCrossProtocolRedirects(true).setConnectTimeoutMs(12000).setReadTimeoutMs(15000)))
+            .setWakeMode(C.WAKE_MODE_NETWORK).build()
+        player.setAudioAttributes(AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_MOVIE).build(),true)
+        player.addListener(object:Player.Listener {
+            override fun onPlaybackStateChanged(state:Int) {
+                if(hasMedia)status=when(state) {Player.STATE_READY->if(player.playWhenReady)"正在播放直投视频" else "已暂停";Player.STATE_BUFFERING->"正在加载直投视频";Player.STATE_ENDED->"视频已结束，可重新投送";else->status}
+                push();observer?.invoke()
+            }
+            override fun onIsPlayingChanged(playing:Boolean) { if(hasMedia && player.playbackState==Player.STATE_READY)status=if(player.playWhenReady)"正在播放直投视频" else "已暂停";push();observer?.invoke() }
+            override fun onRenderedFirstFrame() {frameShown=true;event("视频首帧已显示")}
+            override fun onVideoSizeChanged(size:VideoSize) {observer?.invoke()}
+            override fun onPlayerError(error:PlaybackException) {hasMedia=false;status="播放失败：${error.errorCodeName}";event(status);push()}
+        })
+        runCatching {val wifi=applicationContext.getSystemService(WIFI_SERVICE) as WifiManager;multicast=wifi.createMulticastLock("PuppyCast.direct").apply {setReferenceCounted(false);acquire()}}
+        NativeAirPlay.nativeConfigureVideo(true)
+        val seed=Settings.Secure.getString(contentResolver,Settings.Secure.ANDROID_ID)+":direct-video"
+        port=NativeAirPlay.nativeStart(name,DeviceIdentity.macAddressFrom(seed),File(filesDir,"airplay_video_pairing.key").absolutePath,1920,1080,30,NativeAirPlay.LOG_WARNING,this)
+        status=if(port>0)"等待视频 App 内 AirPlay" else "接收服务启动失败（$port）"
+        event(status);main.post(tick)
+    }
+    private val tick=object:Runnable {override fun run(){if(!alive)return;push();observer?.invoke();main.postDelayed(this,250)}}
+    private fun push() {
+        if(!alive || ticket==0L)return
+        val duration=player.duration.takeIf {it!=C.TIME_UNSET && it>0}?:0L
+        val ready=hasMedia && player.playbackState in intArrayOf(Player.STATE_READY,Player.STATE_ENDED) && player.playerError==null
+        NativeAirPlay.nativeUpdateVideoState(ticket,player.currentPosition.coerceAtLeast(0)/1000.0,duration/1000.0,
+            player.bufferedPosition.coerceAtLeast(0)/1000.0,if(player.isPlaying)player.playbackParameters.speed else 0f,ready,
+            player.playbackState==Player.STATE_BUFFERING,player.isCurrentMediaItemSeekable)
+    }
+    private fun accept(command:()->Unit) {main.post {if(alive)command()}}
+    override fun onRemoteVideoPlay(location:String,startSeconds:Float,ticket:Long) = accept {
+        if(ticket<this.ticket)return@accept
+        if(!DirectRequest.accepted(location)) {status="暂不支持这个视频地址类型";event(status);return@accept}
+        hasMedia=false;player.stop();player.clearMediaItems();this.ticket=ticket;requests++;frameShown=false
+        sourceKind=if(location.startsWith("http://localhost:") || location.startsWith("http://127.0.0.1:"))"发送端协商的 HLS 播放列表" else "HTTP(S) 视频直投"
+        hasMedia=true;status="已收到视频，正在加载";event("收到第 $requests 次播放请求：$sourceKind")
+        player.setPlaybackSpeed(1f);player.setMediaItem(MediaItem.fromUri(location),DirectRequest.startMillis(startSeconds));player.prepare();player.playWhenReady=true;push()
+    }
+    override fun onRemoteVideoSeek(seconds:Float,ticket:Long) = accept {if(ticket==this.ticket && hasMedia && seconds.isFinite() && seconds>=0 && player.isCurrentMediaItemSeekable) {player.seekTo(DirectRequest.startMillis(seconds));event("收到进度跳转");push()}}
+    override fun onRemoteVideoRate(rate:Float,ticket:Long) = accept {if(ticket==this.ticket && hasMedia && rate.isFinite() && rate in 0f..2f) {if(rate==0f)player.pause() else {player.setPlaybackSpeed(rate);player.play()};event(if(rate==0f)"手机暂停" else "手机继续播放");push()}}
+    override fun onRemoteVideoStop(ticket:Long) = accept {if(ticket==this.ticket)stopVideo()}
+    fun stopVideo(){hasMedia=false;frameShown=false;player.stop();player.clearMediaItems();status="等待下一次视频投送";event("本次视频已结束");push()}
+    fun togglePause(){if(hasMedia){if(player.playWhenReady)player.pause() else player.play();push()}}
+    override fun onBind(intent:Intent?):IBinder=binder
+    override fun onStartCommand(intent:Intent?,flags:Int,startId:Int)=START_NOT_STICKY
+    override fun onDestroy(){alive=false;observer=null;main.removeCallbacksAndMessages(null);NativeAirPlay.nativeStop();player.release();multicast?.takeIf{it.isHeld}?.release();stopForeground(true);super.onDestroy()}
+    override fun onLog(level:Int,message:String) {}
+    override fun onClientConnect(name:String,model:String,deviceId:String)=true
+    override fun onSessionStart()=accept {if(!hasMedia){status="收到屏幕镜像请求；请改用视频 App 内的 AirPlay";event(status)}}
+    override fun onSessionEnd() {}
+    override fun onVideoCodec(isH265:Boolean)=0
+    override fun onVideoData(data:ByteBuffer,length:Int,presentationTimeUs:Long) {}
+    override fun onVideoSize(width:Int,height:Int) {}
+    override fun onVideoFlush() {}
+    override fun onVideoPause() {}
+    override fun onVideoResume() {}
+    override fun onVideoStop() {}
+    override fun onAudioFormat(contentType:Int,usingScreen:Boolean,isMedia:Boolean)=accept {if(!hasMedia)event("收到音频连接，等待视频播放请求")}
+    override fun onAudioData(data:ByteBuffer,length:Int,presentationTimeUs:Long) {}
+    override fun onAudioFlush() {}
+    override fun onVolume(decibels:Float) {}
+}

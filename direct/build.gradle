@@ -1,0 +1,30 @@
+// SPDX-License-Identifier: GPL-3.0-only
+plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
+android {
+    namespace 'cn.local.livingroomcast.direct'
+    compileSdk 36
+    ndkVersion '28.2.13676358'
+    defaultConfig {
+        applicationId 'cn.local.livingroomcast.airplayvideo'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '0.3.0-video-alpha1'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+    }
+    compileOptions { coreLibraryDesugaringEnabled true; sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    kotlinOptions { jvmTarget = '17' }
+    signingConfigs { debug { storeFile rootProject.file('signing/test.keystore'); storePassword 'android'; keyAlias 'androiddebugkey'; keyPassword 'android' } }
+    lint { abortOnError true }
+}
+dependencies {
+    implementation project(':mirror')
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    implementation 'androidx.media3:media3-exoplayer:1.9.4'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.9.4'
+    implementation 'androidx.media3:media3-ui:1.9.4'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.1'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+}

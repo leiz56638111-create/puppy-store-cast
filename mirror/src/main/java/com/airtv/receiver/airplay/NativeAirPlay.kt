@@ -40,6 +40,12 @@ interface AirPlayCallbacks {
     fun onAudioData(data: ByteBuffer, length: Int, presentationTimeUs: Long)
     fun onAudioFlush()
 
+    // Optional in-app video callbacks. Mirror-only receivers keep the default no-ops.
+    fun onRemoteVideoPlay(location: String, startSeconds: Float, ticket: Long) {}
+    fun onRemoteVideoSeek(seconds: Float, ticket: Long) {}
+    fun onRemoteVideoRate(rate: Float, ticket: Long) {}
+    fun onRemoteVideoStop(ticket: Long) {}
+
     /** AirPlay volume in dB: -30 (quietest) to 0 (loudest), -144 means muted. */
     fun onVolume(decibels: Float)
 }
@@ -71,6 +77,10 @@ object NativeAirPlay {
         logLevel: Int,
         callbacks: AirPlayCallbacks,
     ): Int
+
+    @JvmStatic external fun nativeConfigureVideo(enabled: Boolean)
+    @JvmStatic external fun nativeUpdateVideoState(ticket: Long, position: Double, duration: Double,
+        buffered: Double, rate: Float, ready: Boolean, buffering: Boolean, seekable: Boolean)
 
     @JvmStatic
     external fun nativeStop()

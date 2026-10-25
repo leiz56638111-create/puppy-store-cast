@@ -468,12 +468,8 @@ raop_handler_pairverify(raop_conn_t *conn,
     raop_t *raop = conn->raop;
     bool register_check = false;  
     if (pairing_session_check_handshake_status(conn->session)) {
-        if (raop->use_pin) {
-            pairing_session_set_setup_status(conn->session);
-            register_check = true;
-        } else {
-            return;
-        }
+        pairing_session_set_setup_status(conn->session);
+        register_check = raop->use_pin;
     }
     unsigned char public_key[X25519_KEY_SIZE];
     unsigned char signature[PAIRING_SIG_SIZE];

@@ -39,6 +39,7 @@ typedef struct playback_info_s {
   //char * uuid;
     uint32_t stallcount;
     double duration;
+    double buffered;
     double position;
     double seek_start;
     double seek_duration;
@@ -105,6 +106,7 @@ struct raop_callbacks_s {
     int   (*video_set_codec)(void *cls, video_codec_t codec);
     /* for HLS video player controls */
     void  (*on_video_play) (void *cls, const char *location, const float start_position);
+    void  (*on_video_wait_ready) (void *cls);
     void  (*on_video_scrub) (void *cls, const float position);
     void  (*on_video_rate) (void *cls, const float rate);
     void  (*on_video_stop) (void *cls);

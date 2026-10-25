@@ -1,0 +1,11 @@
+Puppy Store Cast AirPlay video experiment 0.3.0-video-alpha1
+
+GPL-3.0-only application modifications.
+Native video compatibility/playlist changes adapted from jqssun/android-airplay-server
+https://github.com/jqssun/android-airplay-server
+commit a46cca0a6a1274e9e33c0e750f0f1c1eb1d881ea, patches 0001-0004.
+GPL-3.0; complete license is GPL-3.0.txt in this asset folder.
+Original patch copies and license are in direct/vendor/android-airplay-server in the matching source archive.
+UxPlay/ShairPlay, PlayFair, OpenSSL, libplist, llhttp licenses remain in this folder and source headers.
+Media3/AndroidX: Google/Android Open Source Project, Apache-2.0.
+Source branch: airplay-video-experiment in https://github.com/leiz56638111-create/puppy-store-cast (experiment may not yet be public).

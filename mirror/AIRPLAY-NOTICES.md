@@ -11,3 +11,7 @@
 修改：合并版 library 接入、单一启动入口及模式切换，保留 Android 6.0 的 DLNA 安装并对 AirPlay 原生引擎进行 API 24／ARM 保护；音频解码／输出重建及诊断、按视频时间戳呈现、控制查询连接与媒体会话分离；中文独立实验界面、单独安装标识、请求 1080p/30fps、触摸与遥控操作、Home 后停止接收、连接详情、通知入口、UTF-8 发现测试及会话计数清理。未实现视频 App 内 AirPlay 投送、ALAC 专用播放器或 DRM 内容支持。实验 UI 不把模拟器结果描述为真实苹果设备兼容认证。
 
 APK 内 assets/licenses 保留 GPL、LGPL、Apache、OpenSSL、libplist、PlayFair 及 llhttp 许可证；完整源归档包含 vendor/sources 的官方源码及本模块重建脚本。上游其他作者和许可信息以相应源码头为准。项目原创修改 GPL-3.0-only。
+
+## 视频直投独立实验分支补充（2026-10-25）
+
+`direct` 模块 0.3.0-video-alpha1 单独安装，使用本库的原生 HTTP／FCUP 视频协商和新 JNI 播放／状态接口。采用并修改 jqssun/android-airplay-server 的 0001–0004 补丁，固定提交 a46cca0a6a1274e9e33c0e750f0f1c1eb1d881ea；补丁副本及 GPLv3 在 direct/vendor/android-airplay-server。新增普通 HTTP(S)／HLS、播放控制、请求解析防护和播放列表缓存兼容，未实现视频 DRM、ALAC 或照片幻灯片。上面的“未实现视频 App 内投送”描述公开 0.1.8 的边界，独立实验能力及验收限制见 direct/README.md 和 docs/airplay-video-alpha1.md。未改动已发布的 0.1.8 APK。

@@ -273,7 +273,8 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
 
     const char *client_session_id = http_request_get_header(request, "X-Apple-Session-ID");
     const char *host = http_request_get_header(request, "Host");
-    hls_request =  (host && !cseq && !client_session_id);
+    bool control_url = !strcmp(url,"/server-info") || !strcmp(url,"/play") || !strcmp(url,"/playback-info") || !strcmp(url,"/scrub") || !strcmp(url,"/reverse") || !strcmp(url,"/action") || !strcmp(url,"/stop") || !strncmp(url,"/rate?",6) || !strncmp(url,"/scrub?",7) || !strncmp(url,"/setProperty?",13) || !strncmp(url,"/getProperty?",13);
+    hls_request = (host && !cseq && !client_session_id && !control_url);
 
     if (conn->connection_type == CONNECTION_TYPE_UNKNOWN) {
         if (cseq || ble) {
@@ -403,9 +404,9 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
         free(header_str);
     }
     
-    if (client_session_id) {
-        assert(!strcmp(client_session_id, conn->client_session_id));
-    }
+    /* A sender can reuse its HTTP connection for the next video/session.
+     * Match mutating video controls against the active playback session in the
+     * handlers; request-controlled identifiers must never abort the server. */
 
     logger_log(raop->logger, LOGGER_DEBUG, "Handling request %s with URL %s", method, url);
     raop_handler_t handler = NULL;
@@ -473,6 +474,8 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
                 handler = &http_handler_server_info;
             } else if (!strcmp(url, "/playback-info")) {
                 handler = &http_handler_playback_info;
+            } else if (!strcmp(url, "/scrub")) {
+                handler = &http_handler_scrub_info;
             }
         } else if (!strcmp(method, "PUT")) {
             if (!strncmp (url, "/setProperty?", strlen("/setProperty?"))) {
