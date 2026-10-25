@@ -489,6 +489,7 @@ conn_request(void *ptr, http_request_t *request, http_response_t **response) {
     if (handler != NULL) {
         handler(conn, request, *response, &response_data, &response_datalen);
     } else {
+        logger_log(raop->logger, LOGGER_WARNING, "[DirectVideo] unhandled");
         logger_log(raop->logger, LOGGER_INFO,
                    "Unhandled Client Request: %s %s %s", method, url, protocol);
     }

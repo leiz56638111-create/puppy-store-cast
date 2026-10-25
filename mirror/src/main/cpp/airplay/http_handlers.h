@@ -45,6 +45,7 @@ http_handler_server_info(raop_conn_t *conn, http_request_t *request, http_respon
                          char **response_data, int *response_datalen)  {
 
     raop_t *raop = conn->raop;
+    logger_log(raop->logger, LOGGER_WARNING, "[DirectVideo] server-info");
     assert(raop->dnssd);
     int hw_addr_raw_len = 0;
     const char *hw_addr_raw = dnssd_get_hw_addr(raop->dnssd, &hw_addr_raw_len);
@@ -426,6 +427,7 @@ http_handler_reverse(raop_conn_t *conn, http_request_t *request, http_response_t
                      char **response_data, int *response_datalen) {
 
     raop_t *raop = conn->raop;
+    logger_log(raop->logger, LOGGER_WARNING, "[DirectVideo] reverse");
     /* get http socket for send */
     int socket_fd = httpd_get_connection_socket (raop->httpd, (void *) conn);
     if (socket_fd < 0) {
@@ -462,6 +464,7 @@ http_handler_action(raop_conn_t *conn, http_request_t *request, http_response_t 
                     char **response_data, int *response_datalen) {
 
     raop_t *raop = conn->raop;
+    logger_log(raop->logger, LOGGER_WARNING, "[DirectVideo] action");
     airplay_video_t *airplay_video = (airplay_video_t *) hls_get_current_video(raop);
     bool data_is_plist = false;
     plist_t req_root_node = NULL;
@@ -744,6 +747,7 @@ static void
 http_handler_play(raop_conn_t *conn, http_request_t *request, http_response_t *response,
                       char **response_data, int *response_datalen) {
     raop_t *raop = conn->raop;
+    logger_log(raop->logger, LOGGER_WARNING, "[DirectVideo] play-request");
     char* playback_location = NULL;
     char* playback_uuid = NULL;
     char* client_proc_name = NULL;
@@ -984,6 +988,7 @@ http_handler_play(raop_conn_t *conn, http_request_t *request, http_response_t *r
     return;
 
  play_error:;
+    logger_log(raop->logger, LOGGER_WARNING, "[DirectVideo] play-rejected");
     free(playback_location);
     free(playback_uuid);
     if (req_root_node) {

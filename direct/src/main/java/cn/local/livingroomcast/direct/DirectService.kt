@@ -25,6 +25,15 @@ class DirectService: Service(), AirPlayCallbacks {
     var status="正在启动视频直投接收"; private set
     var port=0; private set
     var requests=0; private set
+    var incomingPlayRequests=0; private set
+    var rejectedPlayRequests=0; private set
+    private var serverQueries=0
+    private var reverseRequests=0
+    private var playlistActions=0
+    private var unsupportedRequests=0
+    private var mediaConnections=0
+    private var audioNegotiation="尚未协商"
+    private var mirrorVideoSeen=false
     var hasMedia=false; private set
     var ticket=0L; private set
     var sourceKind="尚未收到视频"; private set
@@ -36,8 +45,11 @@ class DirectService: Service(), AirPlayCallbacks {
     val name="小狗便利店投屏·直投测试"
     val address: String get()=runCatching { NetworkInterface.getNetworkInterfaces().asSequence().filter { it.isUp && !it.isLoopback }.flatMap { it.inetAddresses.asSequence() }.filterIsInstance<Inet4Address>().firstOrNull { !it.isLinkLocalAddress }?.hostAddress }.getOrNull()?:"未取得局域网地址"
     val diagnostic: String get()=buildString {
-        append("视频直投实验版 0.3.0-video-alpha1\n${Build.MANUFACTURER} ${Build.MODEL}\nAndroid ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n")
+        append("视频直投实验版 0.3.0-video-alpha2\n${Build.MANUFACTURER} ${Build.MODEL}\nAndroid ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n")
         append("地址 $address:$port\n播放请求 $requests 次\n来源 $sourceKind\n状态 $status\n")
+        append("媒体连接 $mediaConnections 次\n视频请求到达 $incomingPlayRequests 次／解析拒绝 $rejectedPlayRequests 次\n设备查询 $serverQueries 次／反向通道 $reverseRequests 次／播放列表响应 $playlistActions 次\n")
+        append("未处理的协议请求 $unsupportedRequests 次\n")
+        append("音频协商 $audioNegotiation\n镜像视频数据 ${if(mirrorVideoSeen) "已收到" else "尚未收到"}\n")
         append("画面 ${player.videoSize.width}×${player.videoSize.height}\n首帧 ${if(frameShown) "已显示" else "未显示"}\n")
         append("\n"+events.joinToString("\n"))
         append("\n\n记录只保存在本次运行内存，不显示完整视频地址或授权信息。实际 App 兼容性需要逐个测试。")
@@ -96,18 +108,51 @@ class DirectService: Service(), AirPlayCallbacks {
     override fun onBind(intent:Intent?):IBinder=binder
     override fun onStartCommand(intent:Intent?,flags:Int,startId:Int)=START_NOT_STICKY
     override fun onDestroy(){alive=false;observer=null;main.removeCallbacksAndMessages(null);NativeAirPlay.nativeStop();player.release();multicast?.takeIf{it.isHeld}?.release();stopForeground(true);super.onDestroy()}
-    override fun onLog(level:Int,message:String) {}
+    override fun onLog(level:Int,message:String) {
+        // Only our fixed event markers enter the UI; never forward raw headers,
+        // URLs, session identifiers or native log bodies to the diagnostic page.
+        val label=when(message) {
+            "[DirectVideo] server-info"->"收到设备能力查询"
+            "[DirectVideo] reverse"->"收到反向通道请求"
+            "[DirectVideo] action"->"收到播放列表响应"
+            "[DirectVideo] play-request"->"收到视频播放请求，正在解析"
+            "[DirectVideo] play-rejected"->"视频请求格式或地址暂不支持"
+            "[DirectVideo] unhandled"->"收到暂未支持的协议请求"
+            else->return
+        }
+        accept {
+            when(message) {
+                "[DirectVideo] server-info"->serverQueries++
+                "[DirectVideo] reverse"->reverseRequests++
+                "[DirectVideo] action"->playlistActions++
+                "[DirectVideo] unhandled"->unsupportedRequests++
+                "[DirectVideo] play-request"->incomingPlayRequests++
+                "[DirectVideo] play-rejected"->{rejectedPlayRequests++;if(!hasMedia)status=label}
+            }
+            event(label)
+        }
+    }
     override fun onClientConnect(name:String,model:String,deviceId:String)=true
-    override fun onSessionStart()=accept {if(!hasMedia){status="收到屏幕镜像请求；请改用视频 App 内的 AirPlay";event(status)}}
+    override fun onSessionStart()=accept {
+        mediaConnections++
+        if(!hasMedia){status="已建立媒体连接，等待 App 发送视频";event(status)}
+    }
     override fun onSessionEnd() {}
-    override fun onVideoCodec(isH265:Boolean)=0
+    override fun onVideoCodec(isH265:Boolean):Int {
+        accept {mirrorVideoSeen=true;if(!hasMedia){status="收到镜像视频数据；此测试包仅接收视频直投";event(status)}}
+        return 0 // Preserve the alpha1 handshake; this diagnostic does not add mirror decoding.
+    }
     override fun onVideoData(data:ByteBuffer,length:Int,presentationTimeUs:Long) {}
     override fun onVideoSize(width:Int,height:Int) {}
     override fun onVideoFlush() {}
     override fun onVideoPause() {}
     override fun onVideoResume() {}
     override fun onVideoStop() {}
-    override fun onAudioFormat(contentType:Int,usingScreen:Boolean,isMedia:Boolean)=accept {if(!hasMedia)event("收到音频连接，等待视频播放请求")}
+    override fun onAudioFormat(contentType:Int,usingScreen:Boolean,isMedia:Boolean)=accept {
+        audioNegotiation="ct=$contentType，usingScreen=$usingScreen，isMedia=$isMedia"
+        event("音频协商：$audioNegotiation")
+        if(!hasMedia){status="已协商音频，等待视频直投；暂未进入视频播放";observer?.invoke()}
+    }
     override fun onAudioData(data:ByteBuffer,length:Int,presentationTimeUs:Long) {}
     override fun onAudioFlush() {}
     override fun onVolume(decibels:Float) {}
