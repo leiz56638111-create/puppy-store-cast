@@ -1,6 +1,6 @@
 # 小狗便利店投屏 · AirPlay 视频直投独立实验版
 
-当前版本 0.3.0-video-alpha3（加入视频流兼容接收），包名 `cn.local.livingroomcast.airplayvideo`。与公开主版 0.1.8、原独立镜像包分别安装，不覆盖主版。此分支尚未公开发布。
+当前版本 0.3.0-video-alpha4（遥控器导航修复），包名 `cn.local.livingroomcast.airplayvideo`。与公开主版 0.1.8、原独立镜像包分别安装，不覆盖主版。此分支尚未公开发布。
 
 ## 用法
 
@@ -30,4 +30,4 @@
 
 使用主工程相同的 JDK 17／21、Android SDK 36、NDK 28.2.13676358、CMake 3.22.1 和 Python 3.12+。设置 JAVA_HOME、ANDROID_HOME，从根目录执行 `bash build-direct.sh`。输出 `direct/build/outputs/apk/debug/direct-debug.apk`。
 
-测试与真机兼容范围以随包说明、`docs/airplay-video-alpha1.md` 及 `docs/airplay-video-alpha2.md`、`docs/airplay-video-alpha3.md` 为准。此实验版不包含对主版横向彩条问题的已验收修复，也不改变公开 0.1.8 的安装包。
+测试与真机兼容范围以随包说明、`docs/airplay-video-alpha1.md` 及 `docs/airplay-video-alpha2.md`、`docs/airplay-video-alpha3.md`、`docs/airplay-video-alpha4.md` 为准。此实验版不包含对主版横向彩条问题的已验收修复，也不改变公开 0.1.8 的安装包。

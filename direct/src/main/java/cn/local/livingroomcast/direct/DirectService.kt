@@ -66,7 +66,7 @@ class DirectService: Service(), AirPlayCallbacks {
     val name="小狗便利店投屏·AirPlay测试"
     val address: String get()=runCatching { NetworkInterface.getNetworkInterfaces().asSequence().filter { it.isUp && !it.isLoopback }.flatMap { it.inetAddresses.asSequence() }.filterIsInstance<Inet4Address>().firstOrNull { !it.isLinkLocalAddress }?.hostAddress }.getOrNull()?:"未取得局域网地址"
     val diagnostic: String get()=buildString {
-        append("视频直投实验版 0.3.0-video-alpha3\n${Build.MANUFACTURER} ${Build.MODEL}\nAndroid ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n")
+        append("视频直投实验版 0.3.0-video-alpha4\n${Build.MANUFACTURER} ${Build.MODEL}\nAndroid ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n")
         append("地址 $address:$port\n有效直投请求 $requests 次\n来源 $sourceKind\n状态 $status\n")
         append("媒体连接 $mediaConnections 次\n地址直投请求到达 $incomingPlayRequests 次／解析拒绝 $rejectedPlayRequests 次\n设备查询 $serverQueries 次／反向通道 $reverseRequests 次／播放列表响应 $playlistActions 次\n")
         append("未处理的协议请求 $unsupportedRequests 次\n")

@@ -11,6 +11,7 @@ parser.add_argument('--serial', required=True, help='Dedicated running emulator,
 parser.add_argument('--adb', default='adb')
 parser.add_argument('--ffmpeg', default='ffmpeg')
 parser.add_argument('--output', default='verification/direct-video')
+parser.add_argument('--test', help='Optional fully qualified instrumentation class or class#method')
 args = parser.parse_args()
 root = Path(__file__).resolve().parent.parent
 out = Path(args.output).resolve()
@@ -38,10 +39,11 @@ with tempfile.TemporaryDirectory(prefix='puppy-direct-media-') as temp:
     try:
         adb('shell', 'am', 'force-stop', 'cn.local.livingroomcast.airplayvideo')
         adb('logcat', '-c')
-        result = adb('shell', 'am', 'instrument', '-w', '-r', 'cn.local.livingroomcast.airplayvideo.test/androidx.test.runner.AndroidJUnitRunner', timeout=600).decode()
+        selection = ['-e', 'class', args.test] if args.test else []
+        result = adb('shell', 'am', 'instrument', '-w', '-r', *selection, 'cn.local.livingroomcast.airplayvideo.test/androidx.test.runner.AndroidJUnitRunner', timeout=600).decode()
         (out/'android-results.txt').write_text(result)
         (out/'logcat.txt').write_bytes(adb('logcat', '-d'))
-        count = re.search(r'OK \((\d+) tests\)', result)
+        count = re.search(r'OK \((\d+) tests?\)', result)
         if not count or 'FAILURES' in result:
             raise AssertionError('Test failed; see '+str(out/'android-results.txt'))
         raw = adb('exec-out', 'run-as', 'cn.local.livingroomcast.airplayvideo', 'tar', '-C', 'files/direct-tests', '-cf', '-', '.')

@@ -1,6 +1,6 @@
 # 小狗便利店投屏
 
-> 当前实验分支新增独立 AirPlay 视频直投包，见 [测试说明](docs/airplay-video-alpha3.md) 和 [模块说明](direct/README.md)。下文描述公开主版 0.1.8，不将实验能力计入主版。
+> 当前实验分支新增独立 AirPlay 视频直投包，见 [测试说明](docs/airplay-video-alpha4.md) 和 [模块说明](direct/README.md)。下文描述公开主版 0.1.8，不将实验能力计入主版。
 
 一个用于安卓电视和安卓平板的轻量 DLNA 视频接收端。打开电视上的应用，在平板视频软件中点 TV / 投屏，选择“小狗便利店投屏”。iPhone／iPad 屏幕镜像可从主界面进入 AirPlay 镜像（测试）。
 

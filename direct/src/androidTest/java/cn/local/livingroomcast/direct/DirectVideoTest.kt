@@ -36,6 +36,47 @@ class DirectVideoTest {
  private fun asset(name:String)=inst.context.assets.open(name).use{it.readBytes()}
  private fun play(w:Wire,path:String="http://10.0.2.2:18099/video.mp4",session:String="test-session"){assertEquals(200,w.send("POST","/play","Content-Location: $path\r\nStart-Position: 0\r\n".toByteArray(),session=session).status);await("real first video frame"){ui{service.frameShown && service.player.isPlaying}}}
  private fun capture(name:String){inst.waitForIdleSync();Thread.sleep(800);val folder=File(inst.targetContext.filesDir,"direct-tests").apply{mkdirs()};val b=inst.uiAutomation.takeScreenshot();File(folder,name).outputStream().use{b.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)};b.recycle()}
+ private fun press(code:Int){
+  await("input window ready") {var ready=false;scenario!!.onActivity {a->val f=DirectActivity::class.java.getDeclaredField("dialog").apply{isAccessible=true};val popup=f.get(a) as? android.app.AlertDialog;ready=if(popup?.isShowing==true)popup.window!!.decorView.hasWindowFocus() else a.hasWindowFocus()};ready}
+  val now=SystemClock.uptimeMillis()
+  val source=if(code==android.view.KeyEvent.KEYCODE_ENTER)android.view.InputDevice.SOURCE_KEYBOARD else android.view.InputDevice.SOURCE_DPAD
+  for(action in intArrayOf(android.view.KeyEvent.ACTION_DOWN,android.view.KeyEvent.ACTION_UP))inst.sendKeySync(android.view.KeyEvent(now,SystemClock.uptimeMillis(),action,code,0,0,android.view.KeyCharacterMap.VIRTUAL_KEYBOARD,0,0,source))
+  inst.waitForIdleSync()
+ }
+ private fun focusedLabel():String {var label="";scenario!!.onActivity {a->label=(a.window.decorView.findFocus() as? android.widget.Button)?.text?.toString()?:"none"};return label}
+ private fun fieldFocused(name:String):Boolean {var focused=false;scenario!!.onActivity {a->val f=DirectActivity::class.java.getDeclaredField(name).apply{isAccessible=true};focused=(f.get(a) as android.view.View).hasFocus()};return focused}
+ private fun dialogOpen():Boolean {var showing=false;scenario!!.onActivity {a->val f=DirectActivity::class.java.getDeclaredField("dialog").apply{isAccessible=true};showing=(f.get(a) as? android.app.AlertDialog)?.isShowing==true};return showing}
+ @Test fun remoteWaitingButtonsWorkWithoutMenuIncludingAfterAudioOnlyNegotiation(){
+  await("initial waiting focus"){focusedLabel()=="连接详情"}
+  var hidden=false;scenario!!.onActivity {a->val f=DirectActivity::class.java.getDeclaredField("video").apply{isAccessible=true};hidden=(f.get(a) as android.view.View).visibility==android.view.View.GONE};assertTrue("hidden player must not compete for waiting-page focus",hidden)
+  press(android.view.KeyEvent.KEYCODE_DPAD_DOWN);assertEquals("退出测试",focusedLabel())
+  press(android.view.KeyEvent.KEYCODE_DPAD_UP);assertEquals("连接详情",focusedLabel())
+  press(android.view.KeyEvent.KEYCODE_DPAD_RIGHT);assertEquals("退出测试",focusedLabel())
+  press(android.view.KeyEvent.KEYCODE_DPAD_LEFT);assertEquals("连接详情",focusedLabel())
+  press(android.view.KeyEvent.KEYCODE_DPAD_CENTER);assertTrue(dialogOpen())
+  press(android.view.KeyEvent.KEYCODE_DPAD_DOWN);press(android.view.KeyEvent.KEYCODE_ENTER);assertFalse(dialogOpen())
+  service.onAudioFormat(2,false,true);await("Bilibili-shaped audio-only connection"){ui{service.diagnostic.contains("ct=2")}}
+  Thread.sleep(500);assertEquals("连接详情",focusedLabel());assertFalse(ui{service.hasMedia})
+  press(android.view.KeyEvent.KEYCODE_DPAD_DOWN);assertEquals("退出测试",focusedLabel());press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+  await("remote exit stops receiver"){!NativeAirPlay.nativeIsRunning()}
+ }
+ @Test fun remoteDirectVideoPauseAndDetailsWorkWithoutMenu(){
+  val w=client();play(w)
+  press(android.view.KeyEvent.KEYCODE_DPAD_UP);assertEquals("连接详情",focusedLabel())
+  press(android.view.KeyEvent.KEYCODE_DPAD_CENTER);assertTrue(dialogOpen());press(android.view.KeyEvent.KEYCODE_DPAD_CENTER);assertFalse(dialogOpen())
+  press(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+  var pauseFocused=false;var actualFocus="";scenario!!.onActivity {a->val f=DirectActivity::class.java.getDeclaredField("video").apply{isAccessible=true};pauseFocused=(f.get(a) as android.view.View).findViewById<android.view.View>(androidx.media3.ui.R.id.exo_play_pause).hasFocus();actualFocus=a.window.decorView.findFocus().toString()+" controller="+(f.get(a) as androidx.media3.ui.PlayerView).isControllerFullyVisible};assertTrue("Down from details must focus play/pause; "+actualFocus,pauseFocused)
+  press(android.view.KeyEvent.KEYCODE_DPAD_CENTER);await("remote pause"){ui{!service.player.playWhenReady}}
+  press(android.view.KeyEvent.KEYCODE_DPAD_CENTER);await("remote resume"){ui{service.player.isPlaying}}
+ }
+ @Test fun remoteStreamControlsCanMoveAndEndReception(){
+  service.onVideoCodec(false);await("stream controls have initial focus"){ui{service.streamActive} && fieldFocused("streamDetails")}
+  press(android.view.KeyEvent.KEYCODE_DPAD_RIGHT);assertEquals("结束接收",focusedLabel())
+  press(android.view.KeyEvent.KEYCODE_DPAD_UP);assertEquals("连接详情",focusedLabel())
+  press(android.view.KeyEvent.KEYCODE_DPAD_CENTER);assertTrue(dialogOpen());press(android.view.KeyEvent.KEYCODE_DPAD_CENTER);assertFalse(dialogOpen())
+  press(android.view.KeyEvent.KEYCODE_DPAD_DOWN);assertEquals("结束接收",focusedLabel());press(android.view.KeyEvent.KEYCODE_DPAD_CENTER)
+  await("stream ended returns to waiting focus"){ui{!service.hasMedia && !service.streamActive} && focusedLabel()=="连接详情"}
+ }
  @Test fun directMp4HasRealAudioClockPauseSeekAndStop(){
   val w=client();play(w);capture("direct-playing.png")
   await("audio decoded"){ui{service.player.audioFormat!=null && (service.player.audioDecoderCounters?.renderedOutputBufferCount?:0)>0}}
