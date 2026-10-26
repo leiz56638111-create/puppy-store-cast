@@ -1,4 +1,4 @@
-Puppy Store Cast AirPlay video experiment 0.3.0-video-alpha2
+Puppy Store Cast AirPlay video experiment 0.3.0-video-alpha3
 
 GPL-3.0-only application modifications.
 Native video compatibility/playlist changes adapted from jqssun/android-airplay-server

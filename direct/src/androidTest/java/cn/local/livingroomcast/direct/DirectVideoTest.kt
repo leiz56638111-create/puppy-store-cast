@@ -52,6 +52,32 @@ class DirectVideoTest {
   assertEquals(200,w.send("POST","/rate?value=1").status);await("resume"){ui{service.player.isPlaying}}
   assertEquals(200,w.send("POST","/stop").status);await("stop clears media"){ui{!service.hasMedia && service.player.mediaItemCount==0}}
  }
+ @Test fun senderVideoStreamRendersAndCanSwitchBothWaysWithDirectVideo(){
+  val units=H264TestStream.asAirPlayShaped(H264TestStream.encode(320,180,18))
+  val folder=File(inst.targetContext.filesDir,"direct-tests").apply{mkdirs()};File(folder,"sender-test.h264").outputStream().use{out->units.forEach{out.write(it.bytes)}}
+  val w=client();play(w)
+  service.onAudioFormat(4,true,true)
+  assertEquals(0,ui{service.onSessionEnd();service.onVideoCodec(false)})
+  await("stream UI and surface"){ui{service.streamActive && service.hasMedia && service.player.mediaItemCount==0}}
+  service.onVideoSize(320,180)
+  for(unit in units){val b=java.nio.ByteBuffer.allocateDirect(unit.bytes.size).apply{put(unit.bytes);position(0)};service.onVideoData(b,unit.bytes.size,unit.presentationTimeUs)}
+  await("real decoded sender-stream frames"){service.streamFrames>=10 && ui{service.frameShown}}
+  val audio=AacTestStream.encodeAacLc(30);assertTrue(audio.size>=10)
+  audio.forEachIndexed {i,bytes->service.onAudioData(java.nio.ByteBuffer.wrap(bytes),bytes.size,i*1024L*1000000/44100)}
+  await("sender-stream audio reaches output"){service.streamAudioFrames>0}
+  val copied=java.util.concurrent.CountDownLatch(1);val bitmap=android.graphics.Bitmap.createBitmap(320,180,android.graphics.Bitmap.Config.ARGB_8888);var copyResult=-1
+  scenario!!.onActivity {a->val field=DirectActivity::class.java.getDeclaredField("streamView").apply{isAccessible=true};val view=field.get(a) as android.view.SurfaceView;android.view.PixelCopy.request(view,bitmap,{result->copyResult=result;copied.countDown()},android.os.Handler(android.os.Looper.getMainLooper()))}
+  assertTrue(copied.await(5,java.util.concurrent.TimeUnit.SECONDS));assertEquals(android.view.PixelCopy.SUCCESS,copyResult)
+  File(folder,"stream-surface.png").outputStream().use{bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,it)};bitmap.recycle()
+  assertEquals(320,ui{service.streamWidth});assertEquals(180,ui{service.streamHeight});capture("compatible-stream-playing.png")
+  Thread.sleep(2400);inst.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);inst.waitForIdleSync();inst.sendKeyDownUpSync(android.view.KeyEvent.KEYCODE_DPAD_CENTER);inst.waitForIdleSync()
+  var opened=false;scenario!!.onActivity {a->val f=DirectActivity::class.java.getDeclaredField("dialog").apply{isAccessible=true};(f.get(a) as? android.app.AlertDialog)?.let{opened=it.isShowing;it.dismiss()}}
+  assertTrue("remote must open stream details after controls auto-hide",opened)
+  assertTrue(ui{service.sourceKind}.contains("视频流"))
+  play(w,path="http://10.0.2.2:18099/video.mp4?after-stream=1")
+  assertFalse(ui{service.streamActive});assertEquals(0L,service.streamFrames);assertTrue(ui{service.player.isPlaying})
+  service.onSessionEnd();Thread.sleep(200);assertTrue("ending the old stream must preserve direct video",ui{service.player.isPlaying})
+ }
  @Test fun sameSessionCanSwitchToANewVideoAddress(){val w=client();play(w);play(w,path="http://10.0.2.2:18099/video.mp4?second=1");assertTrue(ui{service.player.currentMediaItem!!.localConfiguration!!.uri.toString()}.endsWith("?second=1"));assertEquals(2,ui{service.requests})}
  @Test fun binaryAndGenericHlsRequestsPlayWithoutAppAllowlist(){val w=client();assertEquals(200,w.send("POST","/play",asset("generic-hls.bplist"),"application/x-apple-binary-plist").status);await("generic HLS frame"){ui{service.frameShown}};assertEquals("HTTP(S) 视频直投",ui{service.sourceKind})}
  @Test fun malformedControlsAndOldSessionCannotAffectNewVideo(){val w=client();assertEquals(400,w.send("POST","/play","bad-data".toByteArray()).status);await("rejected raw play request is visible"){ui{service.incomingPlayRequests==1 && service.rejectedPlayRequests==1}};play(w,session="first-session");play(w,session="second-session");assertEquals(400,w.send("POST","/rate?value=0",session="first-session").status);assertEquals(400,w.send("POST","/scrub?position=nan",session="second-session").status);assertEquals(400,w.send("POST","/rate?",session="second-session").status);assertEquals(409,w.send("POST","/stop",session="first-session").status);assertTrue(ui{service.player.playWhenReady});assertFalse(ui{service.diagnostic}.contains("http://"));assertTrue(NativeAirPlay.nativeIsRunning())}
@@ -65,14 +91,16 @@ class DirectVideoTest {
   await("proxied HLS rendered"){ui{service.frameShown && service.player.isPlaying}}
   assertEquals("发送端协商的 HLS 播放列表",ui{service.sourceKind});assertTrue(ui{service.player.duration}>10000)
  }
- @Test fun standaloneIdentityAndDiscoveryFeaturesAreHonest(){val w=client();val reply=w.send("GET","/server-info");assertEquals(200,reply.status);val xml=String(reply.body);val mask=Regex("<key>features</key>\\s*<integer>([0-9]+)</integer>").find(xml)!!.groupValues[1].toLong();assertTrue(mask and 1L!=0L);assertTrue(mask and 16L!=0L);assertEquals(0L,mask and 4L);assertEquals(0L,mask and 128L);assertEquals("cn.local.livingroomcast.airplayvideo",inst.targetContext.packageName);capture("direct-waiting.png")}
+ @Test fun standaloneIdentityAndDiscoveryFeaturesAreHonest(){val w=client();val reply=w.send("GET","/server-info");assertEquals(200,reply.status);val xml=String(reply.body);val mask=Regex("<key>features</key>\\s*<integer>([0-9]+)</integer>").find(xml)!!.groupValues[1].toLong();assertTrue(mask and 1L!=0L);assertTrue(mask and 16L!=0L);assertEquals(0L,mask and 4L);assertEquals(128L,mask and 128L);assertEquals("cn.local.livingroomcast.airplayvideo",inst.targetContext.packageName);capture("direct-waiting.png")}
  @Test fun mediaHandshakeAndAudioAloneMustNotBeReportedAsMirrorVideo(){
   service.onSessionStart();await("generic media connection waiting for video"){ui{service.status.contains("等待 App 发送视频")}};assertFalse(ui{service.diagnostic}.contains("收到屏幕镜像请求"));assertEquals(0,ui{service.requests})
-  service.onAudioFormat(4,false,true);await("audio negotiation remains separate from mirror evidence"){ui{service.diagnostic.contains("usingScreen=false")}};assertTrue(ui{service.diagnostic}.contains("镜像视频数据 尚未收到"));assertEquals(0,ui{service.requests})
+  service.onAudioFormat(4,false,true);await("audio negotiation remains separate from mirror evidence"){ui{service.diagnostic.contains("usingScreen=false")}};assertTrue(ui{service.diagnostic}.contains("视频流协商 尚未完成"));assertEquals(0,ui{service.requests})
   val w=client();play(w);assertEquals(1,ui{service.requests});assertEquals(1,ui{service.incomingPlayRequests})
  }
  @Test fun homeStopsReceptionAndOpeningRestarts(){scenario!!.moveToState(androidx.lifecycle.Lifecycle.State.CREATED);await("stopped when leaving"){!NativeAirPlay.nativeIsRunning()};scenario!!.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED);await("restart"){NativeAirPlay.nativeIsRunning()}}
  @Test fun actualBonjourQueryFindsTheDirectReceiver(){
+  val response=client().send("GET","/server-info");val mask=Regex("<key>features</key>\\s*<integer>([0-9]+)</integer>").find(String(response.body))!!.groupValues[1].toLong()
+  val expected="features=0x${java.lang.Long.toHexString(mask and 0xffffffffL)},0x${java.lang.Long.toHexString(mask ushr 32)}"
   val group=java.net.InetAddress.getByName("224.0.0.251")
   java.net.MulticastSocket(null).use { socket ->
    socket.reuseAddress=true;socket.bind(java.net.InetSocketAddress(5353));socket.soTimeout=1000
@@ -80,7 +108,7 @@ class DirectVideoTest {
    val bytes=java.io.ByteArrayOutputStream();repeat(12){bytes.write(if(it==5)1 else 0)}
    for(label in listOf("_airplay","_tcp","local")){bytes.write(label.length);bytes.write(label.toByteArray())};bytes.write(0);bytes.write(byteArrayOf(0,12,0,1))
    val until=SystemClock.elapsedRealtime()+10000;var found=false
-   while(SystemClock.elapsedRealtime()<until && !found){socket.send(java.net.DatagramPacket(bytes.toByteArray(),bytes.size(),group,5353));try{val buffer=ByteArray(8192);val packet=java.net.DatagramPacket(buffer,buffer.size);socket.receive(packet);found=String(buffer,0,packet.length,Charsets.UTF_8).contains(service.name)}catch(_:java.net.SocketTimeoutException){}}
+   while(SystemClock.elapsedRealtime()<until && !found){socket.send(java.net.DatagramPacket(bytes.toByteArray(),bytes.size(),group,5353));try{val buffer=ByteArray(8192);val packet=java.net.DatagramPacket(buffer,buffer.size);socket.receive(packet);val reply=String(buffer,0,packet.length,Charsets.UTF_8);found=reply.contains(service.name) && reply.lowercase().contains(expected)}catch(_:java.net.SocketTimeoutException){}}
    assertTrue("Bonjour reply must contain the direct receiver name",found)
   }
  }

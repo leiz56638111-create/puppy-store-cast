@@ -11,7 +11,7 @@
     <uses-feature android:name="android.software.leanback" android:required="false" />
     <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
     <uses-feature android:name="android.hardware.wifi" android:required="false" />
-    <application android:label="小狗便利店投屏·视频直投测试" android:icon="@drawable/app_icon"
+    <application android:label="小狗便利店投屏·AirPlay兼容测试" android:icon="@drawable/app_icon"
         android:banner="@drawable/tv_banner" android:theme="@style/DirectTheme" android:allowBackup="false"
         android:usesCleartextTraffic="true" android:supportsRtl="true">
         <activity android:name=".DirectActivity" android:exported="true" android:screenOrientation="landscape"

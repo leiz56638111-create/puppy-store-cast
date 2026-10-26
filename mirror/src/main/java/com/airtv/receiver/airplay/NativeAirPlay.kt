@@ -79,6 +79,7 @@ object NativeAirPlay {
     ): Int
 
     @JvmStatic external fun nativeConfigureVideo(enabled: Boolean)
+    @JvmStatic external fun nativeConfigureVideoStream(enabled: Boolean)
     @JvmStatic external fun nativeUpdateVideoState(ticket: Long, position: Double, duration: Double,
         buffered: Double, rate: Float, ready: Boolean, buffering: Boolean, seekable: Boolean)
 

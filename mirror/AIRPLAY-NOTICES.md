@@ -15,3 +15,7 @@ APK 内 assets/licenses 保留 GPL、LGPL、Apache、OpenSSL、libplist、PlayFa
 ## 视频直投独立实验分支补充（2026-10-25）
 
 `direct` 模块 0.3.0-video-alpha1 单独安装，使用本库的原生 HTTP／FCUP 视频协商和新 JNI 播放／状态接口。采用并修改 jqssun/android-airplay-server 的 0001–0004 补丁，固定提交 a46cca0a6a1274e9e33c0e750f0f1c1eb1d881ea；补丁副本及 GPLv3 在 direct/vendor/android-airplay-server。新增普通 HTTP(S)／HLS、播放控制、请求解析防护和播放列表缓存兼容，未实现视频 DRM、ALAC 或照片幻灯片。上面的“未实现视频 App 内投送”描述公开 0.1.8 的边界，独立实验能力及验收限制见 direct/README.md 和 docs/airplay-video-alpha1.md。未改动已发布的 0.1.8 APK。
+
+### 2026-10-26 alpha3 补充
+
+独立 direct 模块增加原有 VideoPipeline／AudioPipeline 的兼容接收，Video/HLS 与 Screen 功能同时可用；Android Surface 显示、尺寸适配、两种路径互相切换及结束清理均在 direct 模块完成。并非将全部输入都称为地址直投，也没有新增 DRM／ALAC 专用播放。真实相册及 Bilibili 的 App 内外播仍待验收；详情 docs/airplay-video-alpha3.md。

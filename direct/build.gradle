@@ -8,8 +8,8 @@ android {
         applicationId 'cn.local.livingroomcast.airplayvideo'
         minSdk 24
         targetSdk 35
-        versionCode 2
-        versionName '0.3.0-video-alpha2'
+        versionCode 3
+        versionName '0.3.0-video-alpha3'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
     }
     compileOptions { coreLibraryDesugaringEnabled true; sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }

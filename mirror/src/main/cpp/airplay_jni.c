@@ -30,6 +30,7 @@ static raop_t *g_raop = NULL;
 static dnssd_t *g_dnssd = NULL;
 static unsigned short g_port = 0;
 static int g_video_enabled = 0;
+static int g_video_stream_enabled = 0;
 static pthread_mutex_t g_video_lock = PTHREAD_MUTEX_INITIALIZER;
 static playback_info_t g_video_info;
 static pthread_cond_t g_video_ready_cond=PTHREAD_COND_INITIALIZER;
@@ -380,10 +381,11 @@ static int cache_methods(JNIEnv *env, jobject cb) {
 
 static void set_airplay_features(dnssd_t *dnssd) {
     if (g_video_enabled) {
-        // Video and HLS, no photo, screen-mirror, or protected-video capability promise.
+        // Advertise video/HLS; stream capability is enabled only with a real decoder.
         const int bits[] = {0,4,9,12,14,16,17,18,19,20,21,22,25,27,28,30};
         for(int i=0;i<64;i++) dnssd_set_airplay_features(dnssd,i,0);
         for(size_t i=0;i<sizeof(bits)/sizeof(bits[0]);i++)dnssd_set_airplay_features(dnssd,bits[i],1);
+        if(g_video_stream_enabled) dnssd_set_airplay_features(dnssd,7,1);
         return;
     }
     /* Mirroring + audio receiver with FairPlay auth; AirPlay-video/HLS is off. */
@@ -592,6 +594,10 @@ Java_com_airtv_receiver_airplay_NativeAirPlay_nativeConfigureVideo(JNIEnv *env, 
     if(g_raop) return;
     g_video_enabled = enabled == JNI_TRUE;g_video_shutdown=0;
     pthread_mutex_lock(&g_video_lock); ++g_video_ticket; memset(&g_video_info,0,sizeof(g_video_info));g_video_buffered=0;pthread_mutex_unlock(&g_video_lock);
+}
+JNIEXPORT void JNICALL
+Java_com_airtv_receiver_airplay_NativeAirPlay_nativeConfigureVideoStream(JNIEnv *env,jclass clazz,jboolean enabled) {
+    (void)env;(void)clazz;if(g_raop)return;g_video_stream_enabled=enabled==JNI_TRUE;
 }
 JNIEXPORT void JNICALL
 Java_com_airtv_receiver_airplay_NativeAirPlay_nativeUpdateVideoState(JNIEnv *env,jclass clazz,jlong ticket,
