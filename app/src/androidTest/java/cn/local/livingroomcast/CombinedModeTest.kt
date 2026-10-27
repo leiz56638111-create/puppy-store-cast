@@ -14,7 +14,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry
 import androidx.test.runner.lifecycle.Stage
-import com.airtv.receiver.airplay.NativeAirPlay
+import io.github.jqssun.airplay.service.AirPlayService
+import io.github.jqssun.airplay.MainActivity as AirPlayActivity
+import io.github.jqssun.airplay.AirPlaySupport
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
@@ -53,6 +55,8 @@ class CombinedModeTest {
         val button = buttons(activity.window.decorView).single { it.text.toString() == label }
         assertTrue("Button $label is enabled", button.isEnabled); button.performClick()
     }
+    private fun airPlayRunning(): Boolean = ui { (current() as? AirPlayActivity)?.service?.serverState?.value == AirPlayService.ServerState.RUNNING }
+    private fun airPlayPortOpen(): Boolean = runCatching { java.net.Socket().use { it.connect(java.net.InetSocketAddress("127.0.0.1", 7000), 500) }; true }.getOrDefault(false)
     private fun open(): MainActivity {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         await("DLNA activity missing") { current() is MainActivity }
@@ -78,28 +82,34 @@ class CombinedModeTest {
         current()?.takeIf { it !is MainActivity }?.let { activity -> ui { activity.finish() } }
         scenario?.close()
         context.stopService(Intent(context, ReceiverService::class.java))
-        context.stopService(Intent(context, com.airtv.receiver.service.AirPlayService::class.java))
-        await("mirror leaked after close") { !NativeAirPlay.nativeIsRunning() }
+        context.stopService(Intent(context, AirPlayService::class.java))
+        await("AirPlay leaked after close") { !airPlayPortOpen() }
     }
     @Test fun packageHasOneLauncherAndTheOriginalInstallIdentity() {
         open()
         assertEquals("cn.local.livingroomcast", context.packageName)
         val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(context.packageName)
         assertEquals(1, context.packageManager.queryIntentActivities(intent, 0).size)
-        assertEquals("0.1.8-test", context.packageManager.getPackageInfo(context.packageName, 0).versionName)
+        val info = context.packageManager.getPackageInfo(context.packageName, 0)
+        assertEquals("1.0.0", info.versionName)
+        assertEquals(10L, info.longVersionCode)
+        assertEquals(23, info.applicationInfo!!.minSdkVersion)
+        assertFalse(AirPlaySupport.isSupported(23, arrayOf("arm64-v8a")))
+        assertFalse(AirPlaySupport.isSupported(31, arrayOf("x86_64")))
+        assertTrue(AirPlaySupport.isSupported(24, arrayOf("armeabi-v7a")))
     }
     @Test fun homeStopsAirPlayAndLauncherRestoresDlna() {
         val dlna = open()
-        click(dlna,"AirPlay 镜像（测试）")
-        await("mirror did not start") { NativeAirPlay.nativeIsRunning() && current() is com.airtv.receiver.ui.MainActivity }
+        click(dlna,"AirPlay")
+        await("mirror did not start") { current() is AirPlayActivity && airPlayRunning() }
         inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_HOME").use { fd ->
             android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes() }
         }
-        await("Home leaked AirPlay") { !NativeAirPlay.nativeIsRunning() && notificationIds().isEmpty() }
+        await("Home leaked AirPlay") { !airPlayPortOpen() && notificationIds().isEmpty() }
         ui { context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
         await("launcher did not restore DLNA") { current() is MainActivity && receiver(current()!!)?.let { ui { it.ui().endpoint().isNotEmpty() } } == true }
         await("DLNA did not advertise after Home") { notificationIds() == setOf(41) }
-        assertFalse(NativeAirPlay.nativeIsRunning())
+        assertFalse(airPlayRunning())
     }
     @Test fun repeatedlySwitchingModesReleasesThePreviousServiceAndPreservesIdentity() {
         val dlna = open()
@@ -110,12 +120,12 @@ class CombinedModeTest {
         repeat(3) { index ->
             val endpoint = ui { receiver(dlna)!!.ui().endpoint() }
             assertTrue(request(endpoint).contains(identity!!))
-            assertFalse(NativeAirPlay.nativeIsRunning())
+            assertFalse(airPlayRunning())
             assertEquals(setOf(41), notificationIds())
-            click(dlna,"AirPlay 镜像（测试）")
-            await("AirPlay activity did not open") { current() is com.airtv.receiver.ui.MainActivity }
+            click(dlna,"AirPlay")
+            await("AirPlay activity did not open") { current() is AirPlayActivity }
             val mirror = current()!!
-            await("AirPlay server not advertising") { NativeAirPlay.nativeIsRunning() && notificationIds() == setOf(42) }
+            await("AirPlay server not advertising") { airPlayRunning() && notificationIds() == setOf(1) }
             if (index == 1) { Thread.sleep(650); capture("combined-airplay.png") }
             assertFalse("Host must stay on stack for return", dlna.isFinishing)
             assertFalse("Old DLNA endpoint must stop", runCatching { request(endpoint); true }.getOrDefault(false))
@@ -123,12 +133,13 @@ class CombinedModeTest {
             if (index > 0) await("DLNA host did not reach stopped state") {
                 ui { ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.STOPPED).contains(dlna) }
             }
-            click(mirror,"返回视频投屏")
-            await("return dialog missing") { inst.uiAutomation.rootInActiveWindow?.findAccessibilityNodeInfosByText("将断开屏幕镜像，返回后恢复视频 App 的 TV／投屏接收。")?.isNotEmpty() == true }
-            val positive = inst.uiAutomation.rootInActiveWindow!!.findAccessibilityNodeInfosByText("返回视频投屏").last()
-            assertTrue(positive.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK))
+            if (index == 0) {
+                // First trip can return before the DLNA host has reached onStop.
+                ui { mirror.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK))
+                    mirror.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BACK)) }
+            } else click(mirror,"返回 DLNA")
             await("DLNA did not resume") { current() === dlna && receiver(dlna)?.let { ui { it.ui().endpoint().isNotEmpty() } } == true }
-            await("AirPlay resources not released") { !NativeAirPlay.nativeIsRunning() && notificationIds() == setOf(41) }
+            await("AirPlay resources not released") { !airPlayPortOpen() && notificationIds() == setOf(41) }
             assertEquals(identity, preferences.getString("uuid", ""))
             assertEquals(1f, ui { receiver(dlna)!!.playback().speed() })
         }

@@ -10,7 +10,7 @@ gradlew.bat text eol=crlf
 *.jar binary
 
 # Preserve original upstream notices and patch context whitespace byte for byte.
-reference/src/main/assets/licenses/** -whitespace
-reference/src/main/cpp/patches/** -whitespace
-reference/src/main/cpp/android_raop_callbacks.c -whitespace
-reference/src/main/java/io/github/jqssun/airplay/viewmodel/DebugInfo.kt -whitespace
+airplay/src/main/assets/licenses/** -whitespace
+airplay/src/main/cpp/patches/** -whitespace
+airplay/src/main/cpp/android_raop_callbacks.c -whitespace
+airplay/src/main/java/io/github/jqssun/airplay/viewmodel/DebugInfo.kt -whitespace

@@ -6,9 +6,9 @@ Original project code and documentation: Copyright (C) 2026 小狗便利店投�
 
 | Component | Version / scope | Copyright and license | Upstream |
 |---|---|---|---|
-| AndroidX Media3 | 1.9.4, including ExoPlayer, HLS, DASH, UI and their Media3 dependencies | The Android Open Source Project; Apache-2.0 | https://github.com/androidx/media |
+| AndroidX Media3 | 1.11.1, including ExoPlayer, HLS, DASH, UI and their Media3 dependencies | The Android Open Source Project; Apache-2.0 | https://github.com/androidx/media |
 | Other AndroidX libraries | Transitive annotation, collection, core, lifecycle, arch, concurrent, versionedparcelable, exifinterface, recyclerview and customview modules; exact versions resolved by Gradle | The Android Open Source Project; Apache-2.0 | https://android.googlesource.com/platform/frameworks/support/ |
-| Kotlin standard library | 2.0.20, transitive runtime dependency | JetBrains s.r.o. and Kotlin Programming Language contributors; Apache-2.0 | https://github.com/JetBrains/kotlin |
+| Kotlin standard library | 2.2.20, transitive runtime dependency | JetBrains s.r.o. and Kotlin Programming Language contributors; Apache-2.0 | https://github.com/JetBrains/kotlin |
 | JetBrains Java annotations | 13.0, transitive dependency | JetBrains s.r.o.; Apache-2.0 | https://github.com/JetBrains/java-annotations |
 | Guava | 33.3.1-android | The Guava Authors; Apache-2.0 | https://github.com/google/guava |
 | failureaccess | 1.0.2, Guava dependency | The Guava Authors; Apache-2.0 | https://github.com/google/guava/tree/master/futures/failureaccess |
@@ -39,6 +39,8 @@ DLNA / UPnP describe interoperability protocols here, not certification or spons
 
 The optional `mirror` Android library, integrated into the combined application, reuses AirTV / UxPlay-derived code and links OpenSSL 3.0.22 and libplist 2.6.0 rebuilt from the bundled pinned upstream sources. Its codecs run only in foreground AirPlay mode; the DLNA mode retains its existing player. Source provenance, modifications, component licenses and source archives are documented in [mirror/AIRPLAY-NOTICES.md](mirror/AIRPLAY-NOTICES.md).
 
-## Independent upstream comparison experiment
+## AirPlay library in 1.0.0
 
-The optional `reference` application is a separate-install GPL-3.0 comparison build based on jqssun/android-airplay-server v0.0.36. It has no dependency on `mirror`, uses Media3 1.11.1, and builds its UxPlay, FFmpeg, libplist, OpenSSL and Oboe components from bundled pinned source archives. This is not a main-app release. Full versions, original license notices, modifications and rebuild instructions: [reference/NOTICES.md](reference/NOTICES.md), [reference/README.md](reference/README.md), and `reference/vendor/sources.json`.
+The `airplay` library replaces the legacy `mirror` engine in the main application. It derives from the separately tested jqssun/android-airplay-server v0.0.36 comparison build and has no runtime dependency on `mirror`. UxPlay, FFmpeg, libplist, OpenSSL 3.4.4 and Oboe 1.9.3 are built from bundled pinned sources; Media3 is 1.11.1 for both DLNA and AirPlay. See [airplay/NOTICES.md](airplay/NOTICES.md), [airplay/README.md](airplay/README.md), and `airplay/vendor/sources.json`.
+
+The original standalone comparison source and install package remain at the local `airplay-upstream-comparison` branch / e3a6f80 and its 0.4.0 outputs. Legacy `mirror`/`direct` source directories remain for history and experiments, but are not linked or packaged by the 1.0.0 main application.

@@ -137,7 +137,7 @@ public final class ReceiverService extends Service implements Dlna.Controller {
             @Override public void onLinkPropertiesChanged(Network network, LinkProperties links) { main.post(ReceiverService.this::refreshNetwork); }
         };
         connectivity.registerNetworkCallback(new NetworkRequest.Builder().addCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN).build(), networkCallback);
-        log("测试版启动：只接收局域网投屏，不设人为时长限制");
+        log("1.0.0 启动：接收局域网投屏，不设人为时长限制");
         refreshNetwork(); main.postDelayed(tick, 1000);
     }
     private void foreground(boolean playing) {

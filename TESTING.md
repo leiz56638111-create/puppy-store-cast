@@ -1,3 +1,15 @@
+# 1.0.0 验证入口
+
+构建：`bash build-local.sh`，另运行`./gradlew :app:assembleDebugAndroidTest`。
+
+专用API31 ARM64模拟器：`python3 tests/run_airplay_video.py --serial emulator-5560 --adb /path/to/adb --output verification/airplay`，默认运行AirPlayIntegrationTest；加`--test cn.local.livingroomcast.CombinedModeTest`检查一图标、模式往返、Home/恢复。测试工具会在专用模拟器建立AndroidWifi。
+
+DLNA真实媒体回归的Instrumentation为PlaybackInstrumentation、QualityInstrumentation、StandbyInstrumentation；合成媒体服务见tests/serve_playback_media.py。JDK协议/格式/画质检查分别为tests/test_protocol.py、test_format_probe.py、test_quality.py，需JAVA_HOME。
+
+原生库的地址/HLS真实输出、H.264注入、音频格式/Oboe启动与发现检查，不能替代真实iPhone/iPad加密握手、原生ALAC/RTP听辨、每个App兼容、电视花屏、游戏延迟或长期同步测试。测试计数与最终APK哈希记录在交付验收JSON；历史测试保留在下文，涉及旧mirror的记录不代表1.0.0当前内核。
+
+---
+
 # 测试说明
 
 ## 本次开源整理

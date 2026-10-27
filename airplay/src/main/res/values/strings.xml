@@ -1,0 +1,7 @@
+<resources>
+    <string name="notification_channel">AirPlay 接收</string>
+    <string name="notification_title">小狗便利店投屏</string>
+    <string name="notification_text">保持界面打开，等待 AirPlay</string>
+    <string name="notification_pin_title">请输入 AirPlay 配对码</string>
+    <string name="notification_pin_text">配对码：%1$s</string>
+</resources>

@@ -67,7 +67,7 @@ public final class MainActivity extends Activity {
         waitingPane = new ScrollView(this); waitingPane.setFillViewport(true);
         waitingPane.addView(waiting, new ScrollView.LayoutParams(-1,-2));
         root.addView(waitingPane,new FrameLayout.LayoutParams(-1,-1));
-        TextView eyebrow = text("LIVING ROOM  /  投屏接收 0.1.8",12,MINT); eyebrow.setLetterSpacing(.10f); waiting.addView(eyebrow);
+        TextView eyebrow = text("LIVING ROOM  /  投屏接收 1.0.0",12,MINT); eyebrow.setLetterSpacing(.10f); waiting.addView(eyebrow);
         TextView title = text("小狗便利店投屏",getResources().getConfiguration().screenWidthDp < 700 ? 28 : 36,WHITE); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD); add(waiting,title,12);
         TextView instruction = text("在平板的软件中点TV/投屏，选择“小狗便利店投屏”",19,WHITE); add(waiting,instruction,9);
         network = text("正在检查本机网络…",14,MUTED); add(waiting,network,13);
@@ -82,8 +82,8 @@ public final class MainActivity extends Activity {
         Button details=button("连接详情",v->details()); LinearLayout.LayoutParams detailParams=new LinearLayout.LayoutParams(-2,dp(48)); detailParams.leftMargin=dp(12); buttons.addView(details,detailParams);
         Button exit=button("退出接收",v->confirmExit()); LinearLayout.LayoutParams exitParams=new LinearLayout.LayoutParams(-2,dp(48)); exitParams.leftMargin=dp(12); buttons.addView(exit,exitParams);
         waiting.addView(scrollControls(buttons));
-        Button mirror=button("AirPlay 镜像（测试）",v->openMirror()); add(waiting,mirror,12);
-        add(waiting,text("iPhone／iPad：先进入 AirPlay 模式，再从控制中心选择屏幕镜像。",13,MUTED),6);
+        Button mirror=button("AirPlay",v->openMirror()); add(waiting,mirror,12);
+        add(waiting,text("iPhone／iPad：进入 AirPlay，可在 App 内隔空播放，也可从控制中心选择屏幕镜像。",13,MUTED),6);
         TextView note=text("按 Home 可后台待机；“退出接收”会停止服务。自动打开新投屏可在“后台待机”中授权。",12,MUTED); add(waiting,note,8);
 
         hud=column(); hud.setPadding(dp(20),dp(12),dp(20),dp(12)); hud.setBackgroundColor(0x99081016);
@@ -139,7 +139,7 @@ public final class MainActivity extends Activity {
         // A rapid round trip can pause/resume without stopping/starting this activity.
         // Rebind here as well, instead of relying on onStart to restore DLNA.
         if(bound)return;
-        stopService(new Intent().setClassName(this,"com.airtv.receiver.service.AirPlayService"));
+        stopService(new Intent().setClassName(this,"io.github.jqssun.airplay.service.AirPlayService"));
         Intent intent=new Intent(this,ReceiverService.class);
         try {
             if(Build.VERSION.SDK_INT>=26)startForegroundService(intent); else startService(intent);
@@ -310,9 +310,9 @@ public final class MainActivity extends Activity {
     }
     private void openMirror() {
         if(switchingMirror)return;
-        if(!com.airtv.receiver.airplay.MirrorSupport.isSupported(Build.VERSION.SDK_INT,Build.SUPPORTED_ABIS)) {
-            new AlertDialog.Builder(this).setTitle("AirPlay 镜像暂不可用")
-                .setMessage("AirPlay 测试功能需要 Android 7.0 及以上的 ARM 设备；本机仍可使用视频 App 的 TV／投屏接收。")
+        if(!io.github.jqssun.airplay.AirPlaySupport.isSupported(Build.VERSION.SDK_INT,Build.SUPPORTED_ABIS)) {
+            new AlertDialog.Builder(this).setTitle("AirPlay 暂不可用")
+                .setMessage("AirPlay 功能需要 Android 7.0 及以上的 ARM 设备；本机仍可使用视频 App 的 TV／投屏接收。")
                 .setPositiveButton("知道了",null).show();return;
         }
         switchingMirror=true;
@@ -323,10 +323,10 @@ public final class MainActivity extends Activity {
             if(bound){unbindService(connection);bound=false;}
             service=null;
             stopService(new Intent(this,ReceiverService.class));
-            startActivity(new Intent().setClassName(this,"com.airtv.receiver.ui.MainActivity"));
+            startActivity(new Intent().setClassName(this,"io.github.jqssun.airplay.MainActivity"));
         } catch(RuntimeException e) {
             switchingMirror=false;
-            Toast.makeText(this,"无法打开 AirPlay 镜像，已返回视频投屏。",Toast.LENGTH_LONG).show();
+            Toast.makeText(this,"无法打开 AirPlay，已返回视频投屏。",Toast.LENGTH_LONG).show();
             Intent intent=new Intent(this,ReceiverService.class);
             if(Build.VERSION.SDK_INT>=26)startForegroundService(intent);else startService(intent);
             bound=bindService(intent,connection,BIND_AUTO_CREATE);

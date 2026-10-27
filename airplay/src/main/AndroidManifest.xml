@@ -1,0 +1,8 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Optional AirPlay library; the API23 host checks support before entry. -->
+    <application>
+        <activity android:name="io.github.jqssun.airplay.MainActivity" android:exported="false" android:screenOrientation="landscape"
+            android:theme="@style/ReferenceTheme" android:configChanges="keyboard|keyboardHidden|navigation|orientation|screenSize|smallestScreenSize|screenLayout|uiMode" />
+        <service android:name="io.github.jqssun.airplay.service.AirPlayService" android:exported="false" android:foregroundServiceType="connectedDevice|mediaPlayback" />
+    </application>
+</manifest>

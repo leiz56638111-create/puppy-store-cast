@@ -28,3 +28,5 @@ mirror/src/main/cpp/prebuilt/
 
 .kotlin/
 reference/src/main/cpp/third_party/
+
+airplay/src/main/cpp/third_party/
