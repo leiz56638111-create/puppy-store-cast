@@ -1,0 +1,223 @@
+--- a/lib/http_handlers.h
++++ b/lib/http_handlers.h
+@@ -1,3 +1,4 @@
++#include <math.h>
+ /**
+  * Copyright (c) 2024 fduncanh
+  * All Rights Reserved.
+@@ -102,58 +103,46 @@
+     free(hw_addr);
+ }    
+ 
+-static void
+-http_handler_scrub(raop_conn_t *conn, http_request_t *request, http_response_t *response,
+-                   char **response_data, int *response_datalen) {
+-    raop_t *raop = conn->raop;
+-    const char *url = http_request_get_url(request);
+-    const char *data = strstr(url, "?");
+-    float scrub_position = 0.0f;
+-    if (data) {
+-        data++;
+-        const char *position = strstr(data, "=") + 1;
+-        char *end = NULL;
+-        double value = strtod(position, &end);
+-        if (end && end != position) {
+-            scrub_position = (float) value;
+-            logger_log(raop->logger, LOGGER_DEBUG, "http_handler_scrub: got position = %.6f",
+-                       scrub_position);	  
+-        }
+-    }
+-    logger_log(raop->logger, LOGGER_DEBUG, "**********************SCRUB %f ***********************",scrub_position);
+-    raop->callbacks.on_video_scrub(raop->callbacks.cls, scrub_position);
+-}
+-
+-static void
+-http_handler_rate(raop_conn_t *conn, http_request_t *request, http_response_t *response,
+-                  char **response_data, int *response_datalen) {
+-
+-    raop_t *raop = conn->raop;
+-    const char *url = http_request_get_url(request);
+-    const char *data = strstr(url, "?");
+-    float rate_value = 0.0f;
+-    if (data) {
+-        data++;
+-        const char *rate = strstr(data, "=") + 1;
+-        char *end = NULL;
+-        float value = strtof(rate, &end);
+-        if (end && end != rate) {
+-            rate_value =  value;
+-            logger_log(raop->logger, LOGGER_DEBUG, "http_handler_rate: got rate = %.6f", rate_value);
+-        }
+-    }
+-    raop->callbacks.on_video_rate(raop->callbacks.cls, rate_value);
+-}
+-
+-static void
+-http_handler_stop(raop_conn_t *conn, http_request_t *request, http_response_t *response,
+-                  char **response_data, int *response_datalen) {
+-
+-    raop_t *raop = conn->raop;
+-    logger_log(raop->logger, LOGGER_INFO, "client HTTP request POST stop");
+-
+-    raop->video_play_conn = NULL;
+-    raop->callbacks.on_video_stop(raop->callbacks.cls);
++static bool video_session_matches(raop_t *raop, http_request_t *request) {
++    const char *session=http_request_get_header(request,"X-Apple-Session-ID");
++    if(!session || raop->current_video < 0 || !raop->airplay_video[raop->current_video]) return true;
++    const char *active=get_apple_session_id(raop->airplay_video[raop->current_video]);
++    return !active || !strcmp(session,active);
++}
++static bool video_query_float(const char *url, const char *key, float *result) {
++    const char *q=strchr(url,'?'); if(!q)return false; q++;
++    size_t len=strlen(key);
++    while(*q) {
++        if(!strncmp(q,key,len) && q[len]=='=') {
++            char *end=NULL; double value=strtod(q+len+1,&end);
++            if(end==q+len+1 || (*end && *end!='&') || !isfinite(value))return false;
++            *result=(float)value;return isfinite(*result);
++        }
++        q=strchr(q,'&');if(!q)break;q++;
++    }
++    return false;
++}
++static void http_handler_scrub(raop_conn_t *conn,http_request_t *request,http_response_t *response,char **data,int *len) {
++    (void)data;(void)len;float value=0;
++    if(!video_session_matches(conn->raop,request) || !video_query_float(http_request_get_url(request),"position",&value) || value<0) { http_response_init(response,"HTTP/1.1",400,"Bad Request");return; }
++    conn->raop->callbacks.on_video_scrub(conn->raop->callbacks.cls,value);
++}
++static void http_handler_rate(raop_conn_t *conn,http_request_t *request,http_response_t *response,char **data,int *len) {
++    (void)data;(void)len;float value=0;
++    if(!video_session_matches(conn->raop,request) || !video_query_float(http_request_get_url(request),"value",&value) || value<0 || value>2) { http_response_init(response,"HTTP/1.1",400,"Bad Request");return; }
++    conn->raop->callbacks.on_video_rate(conn->raop->callbacks.cls,value);
++}
++static void http_handler_scrub_info(raop_conn_t *conn,http_request_t *request,http_response_t *response,char **data,int *len) {
++    (void)request;playback_info_t info={0};conn->raop->callbacks.on_video_acquire_playback_info(conn->raop->callbacks.cls,&info);
++    char body[160];int n=snprintf(body,sizeof(body),"duration: %.6f\r\nposition: %.6f\r\n",info.duration,info.position);
++    *data=malloc(n+1);if(!*data){*len=0;return;}memcpy(*data,body,n+1);*len=n;
++    http_response_add_header(response,"Content-Type","text/parameters");
++}
++static void http_handler_stop(raop_conn_t *conn,http_request_t *request,http_response_t *response,char **data,int *len) {
++    (void)data;(void)len;
++    if(!video_session_matches(conn->raop,request)) { http_response_init(response,"HTTP/1.1",409,"Conflict");return; }
++    conn->raop->video_play_conn = NULL;
++    conn->raop->callbacks.on_video_stop(conn->raop->callbacks.cls);
+ }
+ 
+ /* handles PUT /setProperty http requests from Client to Server */
+@@ -479,8 +468,8 @@
+     if (!airplay_video) goto post_action_error;
+ 
+     const char* session_id = http_request_get_header(request, "X-Apple-Session-ID");
+-    if (!session_id) {
+-        logger_log(raop->logger, LOGGER_ERR, "Play request had no X-Apple-Session-ID");
++    if (!session_id || !video_session_matches(raop, request)) {
++        logger_log(raop->logger, LOGGER_ERR, "Missing or stale HLS session");
+         goto post_action_error;
+     }    
+     const char *apple_session_id = get_apple_session_id(airplay_video);
+@@ -735,7 +724,7 @@
+ static char *_plist_dup_string(plist_t dict, const char *key) {
+     plist_t node = plist_dict_get_item(dict, key);
+     char *val = NULL;
+-    if (node) {
++    if (node && PLIST_IS_STRING(node)) {
+         plist_get_string_val(node, &val);
+     }
+     if (!val) {
+@@ -768,9 +757,10 @@
+         goto play_error;
+     }
+ 
+-    int request_datalen = -1;    
++    if (!*apple_session_id || strlen(apple_session_id) > 128) goto play_error;
++    int request_datalen = -1;
+     const char *request_data = http_request_get_data(request, &request_datalen);
+-    if (request_datalen <= 0) {
++    if (request_datalen <= 0 || request_datalen > 1048576) {
+         goto play_error;
+     }
+ 
+@@ -783,6 +773,7 @@
+     if (data_is_binary_plist) {
+         plist_from_bin(request_data, request_datalen, &req_root_node);
+ 
++        if (!req_root_node || !PLIST_IS_DICT(req_root_node)) goto play_error;
+         playback_uuid = _plist_dup_string(req_root_node, "uuid");
+         playback_location = _plist_dup_string(req_root_node, "Content-Location");
+ 
+@@ -837,7 +828,7 @@
+         free(body);
+     }
+ 
+-    if (!playback_location || !strlen(playback_location)) {
++    if (!playback_location || !strlen(playback_location) || strlen(playback_location) > 32768 || strchr(playback_location, '\r') || strchr(playback_location, '\n')) {
+         goto play_error;
+     }
+ 
+@@ -855,9 +846,14 @@
+     printf("new playback_uuid %s\n\n", playback_uuid);
+ #endif
+ 
++    if (!playback_uuid || !*playback_uuid || strlen(playback_uuid) > 128) goto play_error;
++    if (!isfinite(start_position_seconds) || start_position_seconds < 0 || start_position_seconds > 604800) start_position_seconds = 0;
++    const char *uri_suffix = strstr(playback_location, "/master.m3u8");
++    bool reverse_hls = uri_suffix && data_is_binary_plist &&
++        (!strncmp(playback_location, "mlhls://", 8) || plist_dict_get_item(req_root_node, "clientProcName"));
+     id = get_playlist_by_uuid(raop, playback_uuid);
+ 
+-    if (id >= 0 && !get_playback_location(raop->airplay_video[id])) {
++    if (id >= 0 && (!reverse_hls || !get_playback_location(raop->airplay_video[id]))) {
+         raop_destroy_airplay_video(raop, id);
+         id = -1;
+     }
+@@ -900,7 +896,7 @@
+         }
+     }
+ 
+-    assert (count < MAX_AIRPLAY_VIDEO);
++    if (count >= MAX_AIRPLAY_VIDEO) { raop_destroy_airplay_video(raop, 0); count--; }
+     assert(id == -1);
+     /* initialize new airplay_video structure to hold playlist */
+     for (int i = 0; i < MAX_AIRPLAY_VIDEO; i++) {
+@@ -944,8 +940,7 @@
+     set_start_position_seconds(airplay_video, (float) start_position_seconds);
+ 
+     /* we only support HLS if the playback location is terminated by "/master.m3u8" */
+-    const char *uri_suffix = strstr(playback_location, "/master.m3u8");
+-    if (uri_suffix) {
++    if (reverse_hls) {
+         size_t len = strlen(get_uri_local_prefix(airplay_video)) + strlen(uri_suffix);
+         char *location = (char *) calloc(len + 1, sizeof(char));
+         if (!location) {
+@@ -976,7 +971,7 @@
+                                       start_position_seconds);
+         raop->callbacks.on_video_wait_ready(raop->callbacks.cls);
+     } else {
+-        logger_log(raop->logger, LOGGER_ERR, "Content-Location has unsupported form:\n%s\n", playback_location);
++        logger_log(raop->logger, LOGGER_ERR, "Content-Location has unsupported form");
+         goto play_error;
+     }
+ 
+--- a/lib/raop.c
++++ b/lib/raop.c
+@@ -396,9 +396,8 @@
+         free(header_str);
+     }
+     
+-    if (client_session_id) {
+-        assert(!strcmp(client_session_id, conn->client_session_id));
+-    }
++    /* A new video may reuse the control socket. Mutations are checked against
++       the active video session by the handlers instead of aborting the process. */
+ 
+     logger_log(raop->logger, LOGGER_DEBUG, "Handling request %s with URL %s", method, url);
+     raop_handler_t handler = NULL;
+@@ -466,6 +465,8 @@
+                 handler = &http_handler_server_info;
+             } else if (!strcmp(url, "/playback-info")) {
+                 handler = &http_handler_playback_info;
++            } else if (!strcmp(url, "/scrub")) {
++                handler = &http_handler_scrub_info;
+             }
+         } else if (!strcmp(method, "PUT")) {
+             if (!strncmp (url, "/setProperty?", strlen("/setProperty?"))) {

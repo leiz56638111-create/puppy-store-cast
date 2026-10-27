@@ -1,0 +1,1 @@
+<resources><style name="ReferenceTheme" parent="android:style/Theme.Material.NoActionBar"><item name="android:fontFamily">sans</item><item name="android:colorAccent">#8CE8C3</item><item name="android:windowBackground">#101B20</item></style></resources>

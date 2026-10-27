@@ -1,0 +1,20 @@
+--- a/lib/airplay_video.c
++++ b/lib/airplay_video.c
+@@ -161,7 +161,7 @@
+ }
+ 
+ void set_apple_session_id(airplay_video_t *airplay_video, const char * apple_session_id, size_t len) {
+-    assert(apple_session_id && len == 36);
++    if (!apple_session_id || !len || len > 128) return;
+     char *str = (char *) calloc(len + 1, sizeof(char));
+     if (!str) {
+         printf("Memory allocation failed (str)\n");
+@@ -176,7 +176,7 @@
+ }
+ 
+ void set_playback_uuid(airplay_video_t *airplay_video, const char *playback_uuid, size_t len) {
+-    assert(playback_uuid && len == 36);
++    if (!playback_uuid || !len || len > 128) return;
+     char *str = (char *) calloc(len + 1, sizeof(char));
+     if (!str) {
+         printf("Memory allocation failed (str)\n");

@@ -1,0 +1,39 @@
+{
+  "UxPlay": {
+    "commit": "df67c212a433cf6dda3676dd40c097900d24e645",
+    "archive": "UxPlay-df67c212a433.tar.gz",
+    "sha256": "5eac7c7c7b176cc96425561713e431dfff0d3c680ca0dc1c3b3197afcf887913"
+  },
+  "ffmpeg": {
+    "commit": "38b88335f99e76ed89ff3c93f877fdefce736c13",
+    "archive": "ffmpeg-38b88335f99e.tar.gz",
+    "sha256": "33fdb71bf37456e2df198c16104c0198705f39fb6bfa92af3b0b72e4ea4bf7c5"
+  },
+  "libplist": {
+    "commit": "f41b1ea67045e0c09339974d83e389972d84f166",
+    "archive": "libplist-f41b1ea67045.tar.gz",
+    "sha256": "1a3ca5218b111d2595ad05d207d5e05381f271035c91b4059ed4c1717bb3abc4"
+  },
+  "openssl-cmake": {
+    "commit": "4edd36a8dab5f85a8f92650b5bdf6e0cab13aab8",
+    "archive": "openssl-cmake-4edd36a8dab5.tar.gz",
+    "sha256": "77f9cd84a7e9c0c7326da60006b850087c401f65f28cf76366ae781800884abe"
+  },
+  "android-airplay-server": {
+    "commit": "a46cca0a6a1274e9e33c0e750f0f1c1eb1d881ea",
+    "archive": "android-airplay-server-v0.0.36.tar.gz",
+    "sha256": "6fad0f1c9c3db09f11dcb578667667b1623e8513e06d40fa26c2ee487ae7ad22"
+  },
+  "oboe": {
+    "version": "1.9.3",
+    "url": "https://codeload.github.com/google/oboe/tar.gz/refs/tags/1.9.3",
+    "archive": "oboe-1.9.3.tar.gz",
+    "sha256": "9d2486b74bd396d9d9112625077d5eb656fd6942392dc25ebf222b184ff4eb61"
+  },
+  "openssl": {
+    "version": "3.4.4",
+    "url": "https://github.com/openssl/openssl/releases/download/openssl-3.4.4/openssl-3.4.4.tar.gz",
+    "archive": "openssl-3.4.4.tar.gz",
+    "sha256": "7bdf55ac20f2779e99e5eca306f824fad2b37dee5a06cc35ed5a8b85a6060010"
+  }
+}

@@ -38,3 +38,7 @@ DLNA / UPnP describe interoperability protocols here, not certification or spons
 ## Optional mirror experiment module
 
 The optional `mirror` Android library, integrated into the combined application, reuses AirTV / UxPlay-derived code and links OpenSSL 3.0.22 and libplist 2.6.0 rebuilt from the bundled pinned upstream sources. Its codecs run only in foreground AirPlay mode; the DLNA mode retains its existing player. Source provenance, modifications, component licenses and source archives are documented in [mirror/AIRPLAY-NOTICES.md](mirror/AIRPLAY-NOTICES.md).
+
+## Independent upstream comparison experiment
+
+The optional `reference` application is a separate-install GPL-3.0 comparison build based on jqssun/android-airplay-server v0.0.36. It has no dependency on `mirror`, uses Media3 1.11.1, and builds its UxPlay, FFmpeg, libplist, OpenSSL and Oboe components from bundled pinned source archives. This is not a main-app release. Full versions, original license notices, modifications and rebuild instructions: [reference/NOTICES.md](reference/NOTICES.md), [reference/README.md](reference/README.md), and `reference/vendor/sources.json`.

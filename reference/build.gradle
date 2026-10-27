@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: GPL-3.0-only
+plugins { id 'com.android.application'; id 'org.jetbrains.kotlin.android' }
+android {
+    namespace 'io.github.jqssun.airplay'
+    compileSdk 36
+    ndkVersion '28.2.13676358'
+    defaultConfig {
+        applicationId 'cn.local.livingroomcast.airplayreference'
+        minSdk 24
+        targetSdk 35
+        versionCode 1
+        versionName '0.4.0-upstream-alpha1'
+        testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
+        ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
+        externalNativeBuild { cmake { arguments '-DANDROID_STL=c++_shared', '-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON' } }
+    }
+    externalNativeBuild { cmake { path file('src/main/cpp/CMakeLists.txt'); version '3.22.1' } }
+    compileOptions { coreLibraryDesugaringEnabled true; sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    kotlinOptions { jvmTarget = '17' }
+    buildFeatures { buildConfig true }
+    signingConfigs { debug { storeFile rootProject.file('signing/test.keystore'); storePassword 'android'; keyAlias 'androiddebugkey'; keyPassword 'android' } }
+    lint { abortOnError true }
+}
+tasks.register('prepareReferenceSources', Exec) {
+    commandLine 'python3', file('tools/prepare-sources.py')
+    inputs.files(fileTree('vendor'), fileTree('src/main/cpp/patches'), file('tools/prepare-sources.py'))
+    outputs.dir file('src/main/cpp/third_party')
+}
+tasks.configureEach { if (name.startsWith('configureCMake')) dependsOn('prepareReferenceSources') }
+dependencies {
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
+    implementation 'androidx.core:core-ktx:1.16.0'
+    implementation 'androidx.lifecycle:lifecycle-service:2.9.4'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.9.4'
+    implementation 'androidx.media:media:1.7.0'
+    implementation 'androidx.media3:media3-exoplayer:1.11.1'
+    implementation 'androidx.media3:media3-exoplayer-hls:1.11.1'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0'
+    testImplementation 'junit:junit:4.13.2'
+    androidTestImplementation 'androidx.test.ext:junit:1.2.1'
+    androidTestImplementation 'androidx.test:runner:1.6.1'
+    androidTestImplementation 'androidx.test:rules:1.6.1'
+}

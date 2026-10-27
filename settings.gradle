@@ -9,3 +9,5 @@ include ':app'
 include ':mirror'
 
 include ':direct'
+
+include ':reference'
