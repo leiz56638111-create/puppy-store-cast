@@ -4,7 +4,7 @@
 
 1.0.0 将用户已反馈可用的独立AirPlay上游对照内核，合入原DLNA应用。默认接收视频App的TV／投屏；首页点“AirPlay”进入苹果投屏模式，可以从视频App内隔空播放，也可使用控制中心屏幕镜像。两种模式按需切换，不同时占用接收与播放资源。返回DLNA后重新启动原服务。
 
-本分支1.0.0尚未上传GitHub；此前公开版本见[历史发布](https://github.com/leiz56638111-create/puppy-store-cast/releases)。独立对照版仍保留在airplay-upstream-comparison分支/e3a6f80，旧安装包不变。
+下载 [1.0.0 APK](https://github.com/leiz56638111-create/puppy-store-cast/releases/download/v1.0.0/PuppyStoreCast-1.0.0.apk)，或查看 [发布说明、对应源码与校验文件](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.0)。独立对照版保留在此前的源码历史 e3a6f80，旧安装包不变。
 
 ![1.0.0首页](docs/images/waiting-1.0.0.png)
 
@@ -40,6 +40,8 @@
 - 不支持Miracast、Chromecast或跨网投屏。不绕过DRM/版权授权；App是否支持外播取决于其投送方式与限制。
 - 4K60/HDR、游戏延迟、长期声画同步、历史无声与横向花屏问题仍需真机验收，不因版本号1.0.0而视为全部解决。
 - 同网发现可能受访客网络、AP隔离和Mesh组播策略影响；局域网DLNA控制没有配对认证，不应映射到公网。
+
+新版[海报](docs/images/poster-1.0.0.png)与[功能介绍](docs/release-1.0.0-intro.md)。
 
 ## 构建
 

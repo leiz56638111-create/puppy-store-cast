@@ -1,6 +1,6 @@
 # 1.0.0 DLNA / AirPlay 合并
 
-2026-10-27，用户反馈独立上游对照版成功，明确要求与之前DLNA版本合并成1.0.0。本分支combined-1.0.0，从已验对照版e3a6f80派生；保留原对照分支/安装包，不推送GitHub。
+2026-10-27，用户反馈独立上游对照版成功，明确要求与之前DLNA版本合并成1.0.0。本分支combined-1.0.0，从已验对照版e3a6f80派生；保留原对照分支/安装包。后按用户授权整理为GitHub v1.0.0发布，APK不变；发布入口见README。
 
 `reference`模块转为`airplay`库，主包改依赖该库，移除旧mirror运行依赖。保留NativeBridge的JNI命名、上游接收/原生音频/解码器/GL/NSD、默认参数、会话与播放器修复；主要改名/版本和宿主生命周期。主应用沿用cn.local.livingroomcast、原签名，versionCode10、versionName1.0.0，一入口/一图标。DLNA继续最低API23，AirPlay按API24+与ARM检查后进入。统一Media3为1.11.1，以避免宿主与AirPlay解析/播放版本冲突。
 
