@@ -1,10 +1,10 @@
-# 小狗便利店投屏 · 1.0.1（本地开发版）
+# 小狗便利店投屏 · 1.0.1
 
 安卓电视／平板上的 DLNA 与 AirPlay 接收端。一个安装包、一个图标，原包名 `cn.local.livingroomcast` 和签名不变，可以覆盖1.0.0或旧主版。无账号、广告、订阅或人为播放时长限制，GPL-3.0开源。
 
 1.0.1 的两项更新是“夜色客厅”界面与 AirPlay 后台待机。两个模式共用等待页，地址与诊断收进连接详情；进入 AirPlay 后按 Home 继续待机，再开图标回到当前模式。左上方“视频 App”切回 DLNA；模式仍互斥。完整使用方式见 [1.0.1 说明](docs/1.0.1.md)。
 
-1.0.1 尚未发布到 GitHub。已有公开版为 [1.0.0](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.0)，其 APK／源码及旧独立实验包保持不变。自行构建方式见下方。
+下载 [1.0.1 APK](https://github.com/leiz56638111-create/puppy-store-cast/releases/download/v1.0.1/PuppyStoreCast-1.0.1.apk)，或查看 [发布说明、对应源码与校验文件](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.1)。[1.0.0](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.0) 和旧独立实验包保持不变。自行构建方式见下方。
 
 ![1.0.1 首页](docs/images/waiting-1.0.1.png)
 
@@ -42,7 +42,7 @@
 - 4K60/HDR、游戏延迟、长期声画同步、历史无声与横向花屏问题仍需真机验收，不因版本号更新而视为全部解决。
 - 同网发现可能受访客网络、AP隔离和Mesh组播策略影响；局域网DLNA控制没有配对认证，不应映射到公网。
 
-1.0.0历史[海报](docs/images/poster-1.0.0.png)与[功能介绍](docs/release-1.0.0-intro.md)。
+1.0.1 [社媒海报](docs/images/poster-1.0.1.png)与[功能介绍](docs/release-1.0.1-intro.md)；1.0.0历史海报和介绍保留。
 
 ## 构建
 
@@ -56,6 +56,6 @@ bash build-local.sh
 
 ## 验证与来源
 
-本地1.0.1的使用与边界见[更新说明](docs/1.0.1.md)；合并历史见[1.0.0合并说明](docs/combined-1.0.0.md)、[测试入口](TESTING.md)和[AirPlay模块](airplay/README.md)。模拟器/合成媒体/回调注入不替代真实Apple握手及长期电视播放验收。
+1.0.1的使用与边界见[更新说明](docs/1.0.1.md)；合并历史见[1.0.0合并说明](docs/combined-1.0.0.md)、[测试入口](TESTING.md)和[AirPlay模块](airplay/README.md)。模拟器/合成媒体/回调注入不替代真实Apple握手及长期电视播放验收。
 
 AirPlay基于[jqssun/android-airplay-server v0.0.36](https://github.com/jqssun/android-airplay-server/tree/v0.0.36)，固定上游与修改在[AirPlay许可说明](airplay/NOTICES.md)和`airplay/vendor/sources.json`。1.0.0的主包不再包含旧`:mirror`引擎；其源代码和历史记录仍保留。完整许可见[LICENSE](LICENSE)与[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
