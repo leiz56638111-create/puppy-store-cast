@@ -16,19 +16,21 @@ import android.provider.Settings;
 import android.net.Uri;
 import android.view.*;
 import android.widget.*;
+import io.github.jqssun.airplay.ReceiverMode;
+import io.github.jqssun.airplay.ui.NightLobby;
 import androidx.media3.ui.PlayerView;
 import androidx.media3.ui.DefaultTimeBar;
 import androidx.media3.ui.TimeBar;
 
 @androidx.annotation.OptIn(markerClass = androidx.media3.common.util.UnstableApi.class)
 public final class MainActivity extends Activity {
-    private static final int INK = Color.rgb(16,27,32), MINT = Color.rgb(140,232,195), WHITE = Color.rgb(239,246,243), MUTED = Color.rgb(173,193,193);
+    private static final int INK = NightLobby.INK, MINT = NightLobby.MINT, WHITE = NightLobby.WHITE, MUTED = NightLobby.MUTED;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private ReceiverService service;
     private boolean bound, video, switchingMirror;
     private PlayerView playerView;
     private LinearLayout waiting, hud;
-    private ScrollView waitingPane;
+    private NightLobby waitingPane;
     private DefaultTimeBar timeBar;
     private TextView timelineLabel;
     private Button speedButton, liveButton;
@@ -62,42 +64,22 @@ public final class MainActivity extends Activity {
         root.addView(playerView, new FrameLayout.LayoutParams(-1,-1));
         playerView.setOnClickListener(v -> showHud());
 
-        int side = getResources().getConfiguration().screenWidthDp < 700 ? 20 : 48;
-        waiting = column(); waiting.setPadding(dp(side),dp(20),dp(side),dp(20));
-        waitingPane = new ScrollView(this); waitingPane.setFillViewport(true);
-        waitingPane.addView(waiting, new ScrollView.LayoutParams(-1,-2));
+        waitingPane = new NightLobby(this,false,this::openMirror,this::standby,this::details,()->{},this::confirmExit);
+        waiting=waitingPane.content; status=waitingPane.statusView; progress=waitingPane.messageView;
+        waitingPane.airplayButton.setContentDescription("AirPlay");
         root.addView(waitingPane,new FrameLayout.LayoutParams(-1,-1));
-        TextView eyebrow = text("LIVING ROOM  /  投屏接收 1.0.0",12,MINT); eyebrow.setLetterSpacing(.10f); waiting.addView(eyebrow);
-        TextView title = text("小狗便利店投屏",getResources().getConfiguration().screenWidthDp < 700 ? 28 : 36,WHITE); title.setTypeface(Typeface.DEFAULT,Typeface.BOLD); add(waiting,title,12);
-        TextView instruction = text("在平板的软件中点TV/投屏，选择“小狗便利店投屏”",19,WHITE); add(waiting,instruction,9);
-        network = text("正在检查本机网络…",14,MUTED); add(waiting,network,13);
 
-        LinearLayout card=column(); card.setPadding(dp(18),dp(12),dp(18),dp(12)); card.setBackground(background(0xff1d3038,12));
-        status=text("正在启动接收服务",21,MINT); card.addView(status);
-        progress=text("首次使用：平板和电视连接同一家庭网络。",14,MUTED); progress.setMaxLines(4); add(card,progress,7);
-        add(waiting,card,18);
-        Space space = new Space(this); waiting.addView(space,new LinearLayout.LayoutParams(1,0,1));
-        LinearLayout buttons = new LinearLayout(this); buttons.setOrientation(LinearLayout.HORIZONTAL);
-        Button standby=button("后台待机",v->standby()); buttons.addView(standby);
-        Button details=button("连接详情",v->details()); LinearLayout.LayoutParams detailParams=new LinearLayout.LayoutParams(-2,dp(48)); detailParams.leftMargin=dp(12); buttons.addView(details,detailParams);
-        Button exit=button("退出接收",v->confirmExit()); LinearLayout.LayoutParams exitParams=new LinearLayout.LayoutParams(-2,dp(48)); exitParams.leftMargin=dp(12); buttons.addView(exit,exitParams);
-        waiting.addView(scrollControls(buttons));
-        Button mirror=button("AirPlay",v->openMirror()); add(waiting,mirror,12);
-        add(waiting,text("iPhone／iPad：进入 AirPlay，可在 App 内隔空播放，也可从控制中心选择屏幕镜像。",13,MUTED),6);
-        TextView note=text("按 Home 可后台待机；“退出接收”会停止服务。自动打开新投屏可在“后台待机”中授权。",12,MUTED); add(waiting,note,8);
-
-        hud=column(); hud.setPadding(dp(20),dp(12),dp(20),dp(12)); hud.setBackgroundColor(0x99081016);
-        root.addView(hud,new FrameLayout.LayoutParams(-1,-1)); hud.setVisibility(View.GONE);
+        hud=column(); hud.setPadding(dp(20),dp(12),dp(20),dp(12)); hud.setBackground(background(0xee192927,16));
+        root.addView(hud,new FrameLayout.LayoutParams(-1,-2,Gravity.BOTTOM)); hud.setVisibility(View.GONE);
         hud.setOnClickListener(v -> {
             if(service!=null && service.player().isPlaying()) {
                 hudRequested=false; handler.removeCallbacks(hideHud); hud.setVisibility(View.GONE);
             } else showHud();
         });
-        playbackTitle=text("小狗便利店投屏",21,WHITE); playbackTitle.setMaxLines(1); hud.addView(playbackTitle);
+        playbackTitle=text("小狗便利店投屏",18,WHITE); playbackTitle.setMaxLines(1); hud.addView(playbackTitle);
         playbackStatus=text("正在连接视频",14,MINT); playbackStatus.setMaxLines(2); add(hud,playbackStatus,4);
         playbackTime=text("",13,MUTED); add(hud,playbackTime,3);
         playbackQuality=text("当前画质  正在识别…",13,WHITE); add(hud,playbackQuality,3);
-        hud.addView(new Space(this),new LinearLayout.LayoutParams(1,0,1));
         timelineLabel=text("正在读取时长…",13,WHITE); hud.addView(timelineLabel);
         timeBar=(DefaultTimeBar)getLayoutInflater().inflate(R.layout.playback_time_bar,hud,false); timeBar.setContentDescription("播放进度"); timeBar.setFocusable(true);timeBar.setFocusableInTouchMode(true);
         timeBar.setKeyTimeIncrement(10_000); timeBar.setPlayedColor(MINT); timeBar.setScrubberColor(MINT);
@@ -126,7 +108,7 @@ public final class MainActivity extends Activity {
         Button diagnostics=button("连接详情",v->details()); LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(-2,dp(48)); cp.leftMargin=dp(12); controls.addView(diagnostics,cp);
         Button disconnect=button("结束投屏",v->{if(service!=null)service.stopPlayback();}); LinearLayout.LayoutParams dp=new LinearLayout.LayoutParams(-2,dp(48));dp.leftMargin=dp(12);controls.addView(disconnect,dp);
         hud.addView(scrollControls(controls)); add(hud,text("点击画面 / 方向键唤出操作栏 · 返回键结束播放",11,MUTED),5);
-        details.requestFocus();
+        waitingPane.focusDefault();
         if(Build.VERSION.SDK_INT>=33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)!=android.content.pm.PackageManager.PERMISSION_GRANTED) requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},21);
     }
     @Override protected void onStart() {
@@ -138,6 +120,8 @@ public final class MainActivity extends Activity {
         switchingMirror=false;
         // A rapid round trip can pause/resume without stopping/starting this activity.
         // Rebind here as well, instead of relying on onStart to restore DLNA.
+        if(ReceiverMode.isAirPlay(this) && io.github.jqssun.airplay.AirPlaySupport.isSupported(Build.VERSION.SDK_INT,Build.SUPPORTED_ABIS)) { openMirror(); return; }
+        ReceiverMode.selectDlna(this);
         if(bound)return;
         stopService(new Intent().setClassName(this,"io.github.jqssun.airplay.service.AirPlayService"));
         Intent intent=new Intent(this,ReceiverService.class);
@@ -151,10 +135,8 @@ public final class MainActivity extends Activity {
         if(service.isShuttingDown()) { finish(); return; }
         ReceiverService.Ui ui=service.ui();
         if (modalDialog != null && qualityDialogSession >= 0 && (!ui.video() || qualityDialogSession != ui.mediaGeneration())) modalDialog.dismiss();
-        status.setText(ui.status());
-        network.setText(ui.address().isEmpty()?"请连接家庭 Wi-Fi，或将电视接入同一路由器的网线。":"本机地址  " + ui.address() + "    ·    DLNA 接收");
-        String summary = "已收到 " + ui.received() + " 次播放地址";
-        progress.setText(ui.error().isEmpty()?summary + "\n若设备列表没有本机，请先结束当贝接收，再重新搜索。":ui.error());
+        boolean ready=!ui.endpoint().isEmpty();
+        waitingPane.state(ready?"● 已就绪 · 等待连接":"正在检查网络…",ui.error().isEmpty()?(ready?"":"请连接同一家庭网络"):ui.error(),ready);
         playbackTitle.setText(ui.title());
         playbackStatus.setText(ui.status() + (ui.error().isEmpty()?"":"\n" + ui.error()));
         playbackTime.setText("本次连接  " + ui.elapsed());
@@ -175,7 +157,7 @@ public final class MainActivity extends Activity {
                 // A successful cast should reveal the video immediately, without a status overlay.
                 handler.removeCallbacks(hideHud);hud.setVisibility(View.GONE);
             }
-        } else { hud.setVisibility(View.GONE); if(changed)waiting.getChildAt(waiting.getChildCount()-2).requestFocus(); }
+        } else { hud.setVisibility(View.GONE); if(changed)waitingPane.focusDefault(); }
         updateTimeline();
     }
     private void showHud() {
@@ -294,7 +276,7 @@ public final class MainActivity extends Activity {
         String message="等待接收服务启动。";
         if(service!=null) {
             ReceiverService.Ui u=service.ui();
-            message="小狗便利店投屏 0.1.8-test\n电视：" + Build.MANUFACTURER + " " + Build.MODEL + "\nAndroid " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT
+            message="小狗便利店投屏 1.0.1\n电视：" + Build.MANUFACTURER + " " + Build.MODEL + "\nAndroid " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT
                     + "\n接收器：" + (u.endpoint().isEmpty()?"尚未就绪":u.endpoint())
                     + "\n当前画质：" + u.quality() + " · " + u.qualityMode()
                     + "\n播放速度：" + ReceiverService.speedLabel(service.playback().speed())
@@ -316,6 +298,7 @@ public final class MainActivity extends Activity {
                 .setPositiveButton("知道了",null).show();return;
         }
         switchingMirror=true;
+        ReceiverMode.selectAirPlay(this);
         try {
             // Detach before shutdown: shutdown's observer would otherwise finish this
             // host activity, leaving no DLNA screen to return to.
@@ -326,6 +309,7 @@ public final class MainActivity extends Activity {
             startActivity(new Intent().setClassName(this,"io.github.jqssun.airplay.MainActivity"));
         } catch(RuntimeException e) {
             switchingMirror=false;
+            ReceiverMode.selectDlna(this);
             Toast.makeText(this,"无法打开 AirPlay，已返回视频投屏。",Toast.LENGTH_LONG).show();
             Intent intent=new Intent(this,ReceiverService.class);
             if(Build.VERSION.SDK_INT>=26)startForegroundService(intent);else startService(intent);
@@ -374,7 +358,7 @@ public final class MainActivity extends Activity {
     }
     private LinearLayout column(){LinearLayout view=new LinearLayout(this);view.setOrientation(LinearLayout.VERTICAL);return view;}
     private TextView text(String value,int size,int color){TextView v=new TextView(this);v.setText(value);v.setTextSize(size);v.setTextColor(color);v.setLineSpacing(dp(2),1);return v;}
-    private Button button(String label,View.OnClickListener click){Button b=new Button(this);b.setText(label);b.setTextSize(15);b.setTextColor(WHITE);b.setAllCaps(false);b.setPadding(dp(20),0,dp(20),0);b.setMinHeight(dp(48));b.setMinimumHeight(dp(48));b.setOnClickListener(click);b.setOnFocusChangeListener((v,focus)->{b.setTextColor(focus?INK:WHITE);b.setBackground(background(focus?MINT:0xff2b414b,8));});b.setBackground(background(0xff2b414b,8));return b;}
+    private Button button(String label,View.OnClickListener click){return NightLobby.button(this,label,false,click);}
     private GradientDrawable background(int color,int radius){GradientDrawable g=new GradientDrawable();g.setColor(color);g.setCornerRadius(dp(radius));return g;}
     private void add(LinearLayout parent,View child,int top){LinearLayout.LayoutParams p=new LinearLayout.LayoutParams(-1,-2);p.topMargin=dp(top);parent.addView(child,p);}
     private int dp(int value){return Math.round(value*getResources().getDisplayMetrics().density);}

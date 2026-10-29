@@ -1,12 +1,12 @@
-# 小狗便利店投屏 · 1.0.0
+# 小狗便利店投屏 · 1.0.1（本地开发版）
 
-安卓电视／平板上的 DLNA 与 AirPlay 接收端。一个安装包、一个图标，原包名 `cn.local.livingroomcast` 和签名不变，可以覆盖0.1.8。无账号、广告、订阅或人为播放时长限制，GPL-3.0开源。
+安卓电视／平板上的 DLNA 与 AirPlay 接收端。一个安装包、一个图标，原包名 `cn.local.livingroomcast` 和签名不变，可以覆盖1.0.0或旧主版。无账号、广告、订阅或人为播放时长限制，GPL-3.0开源。
 
-1.0.0 将用户已反馈可用的独立AirPlay上游对照内核，合入原DLNA应用。默认接收视频App的TV／投屏；首页点“AirPlay”进入苹果投屏模式，可以从视频App内隔空播放，也可使用控制中心屏幕镜像。两种模式按需切换，不同时占用接收与播放资源。返回DLNA后重新启动原服务。
+1.0.1 的两项更新是“夜色客厅”界面与 AirPlay 后台待机。两个模式共用等待页，地址与诊断收进连接详情；进入 AirPlay 后按 Home 继续待机，再开图标回到当前模式。左上方“视频 App”切回 DLNA；模式仍互斥。完整使用方式见 [1.0.1 说明](docs/1.0.1.md)。
 
-下载 [1.0.0 APK](https://github.com/leiz56638111-create/puppy-store-cast/releases/download/v1.0.0/PuppyStoreCast-1.0.0.apk)，或查看 [发布说明、对应源码与校验文件](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.0)。独立对照版保留在此前的源码历史 e3a6f80，旧安装包不变。
+1.0.1 尚未发布到 GitHub。已有公开版为 [1.0.0](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.0)，其 APK／源码及旧独立实验包保持不变。自行构建方式见下方。
 
-![1.0.0首页](docs/images/waiting-1.0.0.png)
+![1.0.1 首页](docs/images/waiting-1.0.1.png)
 
 ## 功能
 
@@ -16,6 +16,7 @@
 - DLNA播放成功后信息层立即隐藏；触摸画面或方向键唤出控制，闲置约2秒收起。
 - DLNA可后台待机，收到新投屏后尝试自动打开；系统限制下可能需要手动打开。自动弹出授权沿用原逻辑。
 - AirPlay：App内视频隔空播放、视频流／控制中心屏幕镜像、音频接收；支持中文连接详情、暂停／继续（地址视频）、重新连接、遥控器和触摸。
+- AirPlay可后台待机；有授权且系统允许时，有效投送会尝试打开画面。无授权时需手动打开，超时后需重新投送；播放中按Home结束本次会话、继续等待。
 - AirPlay沿用对照版的原生音频缓冲／时间线、FFmpeg后备、Oboe、解码器选择和持久Surface渲染；保留默认设置。
 - 连接详情在本次运行内存保存，隐藏视频地址和授权内容。
 
@@ -23,11 +24,11 @@
 
 ## 安装与使用
 
-1. 将PuppyStoreCast-1.0.0.apk拷到U盘，通过电视文件管理器安装，可直接覆盖旧主版。
+1. 将PuppyStoreCast-1.0.1.apk拷到U盘，通过电视文件管理器安装，可直接覆盖旧主版。
 2. 打开“小狗便利店投屏”，发送端与电视连接同一家庭局域网。
 3. 安卓视频App：点TV／投屏，选择“小狗便利店投屏”。
 4. iPhone／iPad：先点电视首页的“AirPlay”，再从相册视频或视频App内选择隔空播放，或从控制中心选择屏幕镜像；设备名均为“小狗便利店投屏”。
-5. AirPlay页面点“返回 DLNA”或按返回键，释放AirPlay并恢复DLNA；按Home停止AirPlay，再次从图标打开默认DLNA。DLNA状态按Home保留后台待机。
+5. AirPlay页面左上方“视频 App”切回DLNA；等待页按返回键打开后台待机提示，播放中返回结束本次投送。两种模式按Home均可待机；重新打开图标恢复原模式。“退出接收”停止服务。
 
 测试新版时先退出其他接收软件，包括独立上游对照版，避免手机选错或端口冲突。不需要卸载旧的独立实验包。
 
@@ -36,12 +37,12 @@
 - DLNA最低Android6.0/API23；AirPlay需要Android7.0/API24以上的ARM设备。APK含arm64-v8a与armeabi-v7a，32位运行及API23实机仍未在本轮验收。
 - 用户先前反馈Sony XR-85X95EK与安卓平板的Z视介、小红书、抖音可投；本次又确认独立AirPlay对照版整体可用，但未提供逐App、时长、机型与同步明细。合并包需要分别复测，不能据此宣称所有App兼容。
 - AirPlay默认自动分辨率、申请最高60fps、AAC开启、ALAC广播关闭、自适应音频缓冲、预约呈现关闭。申请值、输入帧计数不等于电视实际显示FPS；广播尺寸不等于当前视频画质。
-- AirPlay仅前台接收，不随DLNA后台待机一起常驻；不开机自启。电视深度待机/清理任务可能停止后台服务。
+- 当前模式可后台待机；后台打开画面受系统版本和授权限制。不开机自启，电视深度待机、强制停止或厂商清理可能结束服务；不承诺一直在线。
 - 不支持Miracast、Chromecast或跨网投屏。不绕过DRM/版权授权；App是否支持外播取决于其投送方式与限制。
-- 4K60/HDR、游戏延迟、长期声画同步、历史无声与横向花屏问题仍需真机验收，不因版本号1.0.0而视为全部解决。
+- 4K60/HDR、游戏延迟、长期声画同步、历史无声与横向花屏问题仍需真机验收，不因版本号更新而视为全部解决。
 - 同网发现可能受访客网络、AP隔离和Mesh组播策略影响；局域网DLNA控制没有配对认证，不应映射到公网。
 
-新版[海报](docs/images/poster-1.0.0.png)与[功能介绍](docs/release-1.0.0-intro.md)。
+1.0.0历史[海报](docs/images/poster-1.0.0.png)与[功能介绍](docs/release-1.0.0-intro.md)。
 
 ## 构建
 
@@ -55,6 +56,6 @@ bash build-local.sh
 
 ## 验证与来源
 
-检查与真机边界见[1.0.0合并说明](docs/combined-1.0.0.md)、[测试入口](TESTING.md)和[AirPlay模块](airplay/README.md)。模拟器/合成媒体/回调注入不替代真实Apple握手及长期电视播放验收。
+本地1.0.1的使用与边界见[更新说明](docs/1.0.1.md)；合并历史见[1.0.0合并说明](docs/combined-1.0.0.md)、[测试入口](TESTING.md)和[AirPlay模块](airplay/README.md)。模拟器/合成媒体/回调注入不替代真实Apple握手及长期电视播放验收。
 
 AirPlay基于[jqssun/android-airplay-server v0.0.36](https://github.com/jqssun/android-airplay-server/tree/v0.0.36)，固定上游与修改在[AirPlay许可说明](airplay/NOTICES.md)和`airplay/vendor/sources.json`。1.0.0的主包不再包含旧`:mirror`引擎；其源代码和历史记录仍保留。完整许可见[LICENSE](LICENSE)与[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

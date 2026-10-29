@@ -1,6 +1,6 @@
 # AirPlay 模块来源、许可与修改
 
-本目录为小狗便利店投屏1.0.0内使用的 GPL-3.0-only AirPlay库，源于已单独交付的0.4.0-upstream-alpha1对照版；对照版保留在airplay-upstream-comparison分支。是上游项目的修改版，保留 jqssun/android-airplay-server 和下列作者原始声明；并非上游官方发行。上游版本 v0.0.36，提交 a46cca0a6a1274e9e33c0e750f0f1c1eb1d881ea。完整上游源树和依赖源码归档在 `vendor/sources/`，准确哈希在 `vendor/sources.json`；构建改动记录在 README 和准备脚本。
+本目录为小狗便利店投屏1.0.1内使用的 GPL-3.0-only AirPlay库，源于已单独交付的0.4.0-upstream-alpha1对照版；对照版保留在airplay-upstream-comparison分支。是上游项目的修改版，保留 jqssun/android-airplay-server 和下列作者原始声明；并非上游官方发行。上游版本 v0.0.36，提交 a46cca0a6a1274e9e33c0e750f0f1c1eb1d881ea。完整上游源树和依赖源码归档在 `vendor/sources/`，准确哈希在 `vendor/sources.json`；构建改动记录在 README 和准备脚本。
 
 | 组件 | 固定版本/提交 | 许可/来源 |
 |---|---|---|
@@ -20,3 +20,5 @@ UxPlay 包括原作者注明的 Playfair、llhttp 等组件，许可文件保留
 2026-10-27 小狗便利店投屏 contributors 的修改：独立持久配对身份（使用上游随机 MAC 后备逻辑，不读取硬件 MAC）、替换 UI、关闭开机/后台/连接自动拉起、移除视频下载、增加诊断与会话检查、移植适用的请求边界修复、补齐 LifecycleService 的 super 调用和 Media3 opt-in，提前释放直投播放器并隔离旧实例回调。1.0.0将本模块转为库、移除独立Launcher，统一“小狗便利店投屏”发现名；增加DLNA宿主切换与返回前释放，不改原生接收/音频/GL算法。用本地固定源码归档替换网络原生依赖下载，NDK 28.2 / SDK36 / AGP8.11.1 替代上游 NDK27 / SDK37 / AGP9.4.1；Oboe 改源码构建。音频时间线、编解码、GL/解码器算法保持上游版本。
 
 源码发行包不含任何签名私钥、配对密钥或第三方视频内容。FFmpeg 和 libplist 为静态链接；所需源文件、补丁及重新构建/重新链接说明均随同提供。完整 GPL 文本见根 LICENSE，依赖许可副本在 assets/licenses 及原始归档。
+
+2026-10-29，1.0.1新增统一夜色界面、后台接收／模式恢复、有效媒体请求唤起、音频输出门控、延后播放与未展示超时。修改位于Android接入层；固定上游版本、原生协议、编解码、音频时间线和GL算法保持不变。未加入开机自启。

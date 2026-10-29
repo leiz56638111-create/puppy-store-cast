@@ -8,17 +8,14 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
-import android.content.res.ColorStateList
-import android.graphics.Color
-import android.graphics.drawable.GradientDrawable
-import android.graphics.drawable.StateListDrawable
+import android.provider.Settings
+import android.net.Uri
+import io.github.jqssun.airplay.ui.NightLobby
 import android.os.*
 import android.view.*
 import android.widget.*
 import androidx.core.content.ContextCompat
 import io.github.jqssun.airplay.service.AirPlayService
-import java.net.Inet4Address
-import java.net.NetworkInterface
 
 /** Native TV shell around the v0.0.36 service. Optional AirPlay mode of the DLNA host; no legacy :mirror dependency. */
 class MainActivity : Activity() {
@@ -28,8 +25,7 @@ class MainActivity : Activity() {
     private lateinit var root: FrameLayout
     private lateinit var mirror: SurfaceView
     private lateinit var video: SurfaceView
-    private lateinit var waiting: ScrollView
-    private lateinit var status: TextView
+    private lateinit var waiting: NightLobby
     private lateinit var tools: LinearLayout
     private lateinit var pause: Button
     private lateinit var waitingDetails: Button
@@ -49,6 +45,7 @@ class MainActivity : Activity() {
             if (mirror.holder.surface.isValid) service?.setVideoSurface(mirror.holder.surface)
             if (video.holder.surface.isValid) service?.setVideoPlaybackSurface(video.holder.surface)
             render()
+            attachVisiblePresentation()
         }
         override fun onServiceDisconnected(name: ComponentName?) { service = null; render() }
     }
@@ -56,20 +53,7 @@ class MainActivity : Activity() {
     private fun text(value: String, size: Float) = TextView(this).apply {
         text = value; textSize = size; setTextColor(0xFFEFF6F3.toInt()); setPadding(0, dp(6), 0, dp(6))
     }
-    private fun button(label: String, action: () -> Unit) = Button(this).apply {
-        id = View.generateViewId(); text = label
-        isFocusable = true; isFocusableInTouchMode = true; minHeight = dp(52)
-        setPadding(dp(18), dp(8), dp(18), dp(8)); backgroundTintList = null
-        fun shape(color: Int) = GradientDrawable().apply {
-            setColor(color); cornerRadius = dp(6).toFloat(); setStroke(dp(2), 0xFFCCEFE0.toInt())
-        }
-        background = StateListDrawable().apply {
-            addState(intArrayOf(android.R.attr.state_focused), shape(0xFF8CE8C3.toInt()))
-            addState(intArrayOf(android.R.attr.state_pressed), shape(0xFF8CE8C3.toInt()))
-            addState(intArrayOf(), shape(0xFF3F4C55.toInt()))
-        }
-        setTextColor(ColorStateList(arrayOf(intArrayOf(android.R.attr.state_focused), intArrayOf(android.R.attr.state_pressed), intArrayOf()), intArrayOf(Color.BLACK, Color.BLACK, Color.WHITE)))
-        setOnClickListener { action() }
+    private fun button(label: String, action: () -> Unit) = NightLobby.button(this, label, false) { action() }.apply {
         setOnFocusChangeListener { _, focused -> if (focused && mode != "等待") armHide() }
     }
     private fun link(buttons: List<Button>) = buttons.forEachIndexed { i, b ->
@@ -83,12 +67,13 @@ class MainActivity : Activity() {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_FULLSCREEN or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-        root = FrameLayout(this).apply { setBackgroundColor(0xFF101B20.toInt()) }; setContentView(root)
+        root = FrameLayout(this).apply { setBackgroundColor(NightLobby.INK) }; setContentView(root)
         fun surface(playback: Boolean) = SurfaceView(this).apply {
             visibility = View.INVISIBLE; isFocusable = false
             holder.addCallback(object : SurfaceHolder.Callback {
                 override fun surfaceCreated(holder: SurfaceHolder) {
                     if (playback) service?.setVideoPlaybackSurface(holder.surface) else service?.setVideoSurface(holder.surface)
+                    if (this@MainActivity.foreground) attachVisiblePresentation()
                 }
                 override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
                 override fun surfaceDestroyed(holder: SurfaceHolder) {
@@ -99,32 +84,25 @@ class MainActivity : Activity() {
             root.addView(this, FrameLayout.LayoutParams(-1, -1, Gravity.CENTER))
         }
         mirror = surface(false); video = surface(true)
-        waiting = ScrollView(this).apply { isFocusable = false; descendantFocusability = ViewGroup.FOCUS_AFTER_DESCENDANTS }
-        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(36), dp(20), dp(36), dp(20)) }
-        waiting.addView(column); root.addView(waiting, FrameLayout.LayoutParams(-1, -1))
-        column.addView(text("小狗便利店投屏 · AirPlay", 28f))
-        column.addView(text("在相册视频或视频 App 内点隔空播放，选择“小狗便利店投屏”", 20f))
-        column.addView(text("也可从 iPhone／iPad 控制中心选择“屏幕镜像”。", 17f))
-        status = text("正在启动…", 18f).apply { setTextColor(0xFF8CE8C3.toInt()) }; column.addView(status)
-        column.addView(text("1.0.0 · AirPlay 接收\n保持界面打开；先退出其他投屏接收软件。", 15f))
-        val row = LinearLayout(this)
-        waitingDetails = button("连接详情") { details() }
-        val restart = button("重新连接") { service?.restartReceiver() }
-        val exit = button("返回 DLNA") { returnToDlna() }
-        listOf(waitingDetails, restart, exit).forEach { row.addView(it) }; link(listOf(waitingDetails, restart, exit))
-        column.addView(HorizontalScrollView(this).apply { isFocusable = false; addView(row) })
-        column.addView(text("方向键选择，确认键打开；播放时按确认键呼出操作。返回可恢复 DLNA；Home 会停止 AirPlay。", 14f))
-        tools = LinearLayout(this).apply { visibility = View.GONE; setPadding(dp(12), dp(8), dp(12), dp(8)); setBackgroundColor(0xDD101B20.toInt()) }
+        waiting = NightLobby(this, true, ::returnToDlna, ::standby, ::details, { service?.restartReceiver() }, ::confirmExit)
+        waiting.dlnaButton.contentDescription = "返回 DLNA"
+        waiting.airplayButton.contentDescription = "AirPlay"
+        waitingDetails = waiting.detailsButton
+        root.addView(waiting, FrameLayout.LayoutParams(-1, -1))
+        tools = LinearLayout(this).apply { visibility = View.GONE; setPadding(dp(12), dp(8), dp(12), dp(8)); background = NightLobby.shape(this@MainActivity, 0xee192927.toInt(), 16, 0) }
         playbackDetails = button("连接详情") { details() }
         pause = button("暂停") { service?.let { it.setVideoPlaying(!it.videoPlaybackInfo.value.playing) }; armHide() }
         val end = button("结束接收") { service?.restartReceiver() }
-        tools.addView(playbackDetails); tools.addView(pause); tools.addView(end)
+        listOf(playbackDetails, pause, end).forEachIndexed { index, b ->
+            tools.addView(b, LinearLayout.LayoutParams(-2, dp(48)).apply { if (index > 0) leftMargin = dp(10) })
+        }
         root.addView(tools, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
     }
     override fun onStart() {
         super.onStart()
         if (!AirPlaySupport.isSupported(Build.VERSION.SDK_INT, Build.SUPPORTED_ABIS)) { finish(); return }
         foreground = true
+        ReceiverMode.selectAirPlay(this)
         // The host may have been resumed from a notification; stop its receiver first.
         stopService(Intent().setClassName(this, "cn.local.livingroomcast.ReceiverService"))
         val intent = Intent(this, AirPlayService::class.java).setAction(AirPlayService.ACTION_START_SERVER)
@@ -132,38 +110,77 @@ class MainActivity : Activity() {
         bound = bindService(intent, connection, Context.BIND_AUTO_CREATE)
         main.post(tick)
     }
-    private fun releaseReceiver() {
+    private fun attachVisiblePresentation() {
+        val s = service ?: return
+        val ready = when {
+            s.videoPlaybackActive.value -> video.holder.surface.isValid && video.visibility == View.VISIBLE
+            s.mirroringActive.value -> mirror.holder.surface.isValid && mirror.visibility == View.VISIBLE
+            else -> true
+        }
+        if (foreground && ready) s.setPresentationVisible(true)
+    }
+    private fun detachPresentation() {
         foreground = false
         dialog?.dismiss(); dialog = null
         main.removeCallbacksAndMessages(null)
-        service?.stopServer(); service = null
+        if (mirror.holder.surface.isValid) service?.clearVideoSurface(mirror.holder.surface)
+        if (video.holder.surface.isValid) service?.clearVideoPlaybackSurface(video.holder.surface)
+        service?.setPresentationVisible(false)
         if (bound) { unbindService(connection); bound = false }
-        stopService(Intent(this, AirPlayService::class.java))
+        service = null
         mode = ""; revealKey = null
     }
-    private fun returnToDlna() { releaseReceiver(); finish() }
-    override fun onStop() { releaseReceiver(); super.onStop() }
+    private fun returnToDlna() {
+        ReceiverMode.selectDlna(this)
+        service?.stopServer()
+        stopService(Intent(this, AirPlayService::class.java))
+        detachPresentation()
+        finish()
+    }
+    private fun confirmExit() {
+        dialog = AlertDialog.Builder(this).setTitle("退出接收？")
+            .setMessage("将停止 AirPlay 后台待机。再次打开应用即可恢复。")
+            .setNegativeButton("继续接收", null)
+            .setPositiveButton("退出") { _, _ ->
+                ReceiverMode.stopAirPlay(this)
+                service?.stopServer()
+                stopService(Intent(this, AirPlayService::class.java))
+                detachPresentation()
+                finishAffinity()
+            }.create().apply { setOnDismissListener { dialog = null }; show() }
+    }
+    private fun standby() {
+        val allowed = Build.VERSION.SDK_INT < 29 || Settings.canDrawOverlays(this)
+        val builder = AlertDialog.Builder(this).setTitle("AirPlay 后台待机")
+            .setMessage(if (allowed) "回到桌面后继续等待 AirPlay，收到投屏时会尝试打开播放界面。关机、深度休眠或强制停止后，需重新打开应用。" else "回到桌面后仍可被 iPhone / iPad 发现。允许“显示在其他应用上层”后，投屏时会尝试自动打开界面；否则需手动打开应用，必要时重新投送。此权限不显示悬浮窗。")
+            .setNegativeButton("取消", null)
+        if (allowed) builder.setPositiveButton("进入后台") { _, _ -> moveTaskToBack(true) }
+        else builder.setPositiveButton("去授权") { _, _ ->
+            try { startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName"))) }
+            catch (_: android.content.ActivityNotFoundException) { Toast.makeText(this, "可到系统应用设置中授权；也可手动打开本应用播放", Toast.LENGTH_LONG).show() }
+        }.setNeutralButton("直接后台等待") { _, _ -> moveTaskToBack(true) }
+        dialog = builder.create().apply { setOnDismissListener { dialog = null }; show() }
+    }
+    override fun onStop() { detachPresentation(); super.onStop() }
     private val tick = object : Runnable {
         override fun run() { if (foreground) { render(); main.postDelayed(this, 400) } }
     }
-    private fun address(): String = runCatching {
-        NetworkInterface.getNetworkInterfaces().asSequence().filter { it.isUp && !it.isLoopback }
-            .flatMap { it.inetAddresses.asSequence() }.filterIsInstance<Inet4Address>()
-            .firstOrNull { !it.isLinkLocalAddress }?.hostAddress
-    }.getOrNull() ?: "未取得局域网地址"
     private fun render() {
         val s = service
+        if (s != null && !ReceiverMode.wantsAirPlay(this) && s.serverState.value == AirPlayService.ServerState.STOPPED) { finishAffinity(); return }
         val next = when { s?.videoPlaybackActive?.value == true -> "视频地址"; s?.mirroringActive?.value == true -> "视频流"; else -> "等待" }
         val changed = next != mode; mode = next
         mirror.visibility = if (mode == "视频流") View.VISIBLE else View.INVISIBLE
         video.visibility = if (mode == "视频地址") View.VISIBLE else View.INVISIBLE
         waiting.visibility = if (mode == "等待") View.VISIBLE else View.GONE
-        val audio = if (s?.audioOnly?.value == true) "已连接音频，尚未收到视频" else "等待 AirPlay"
-        status.text = when (s?.serverState?.value) {
-            AirPlayService.ServerState.RUNNING -> "$audio · 本机 ${address()}:7000 · 连接 ${s.connectionCount.value}"
-            AirPlayService.ServerState.ERROR -> "启动失败，请先退出其他接收器，再点“重新连接”"
-            else -> "正在启动接收服务…"
+        val ready = s?.serverState?.value == AirPlayService.ServerState.RUNNING
+        val message = when {
+            s?.serverState?.value == AirPlayService.ServerState.ERROR -> "启动失败，请退出其他接收器，再点“重新连接”"
+            s?.audioOnly?.value == true -> "已收到音频会话，等待视频画面"
+            !ready -> "正在准备接收服务…"
+            else -> ""
         }
+        waiting.state(if (ready) "● 已就绪 · 等待连接" else "正在启动…", message, ready)
         pause.text = if (s?.videoPlaybackInfo?.value?.playing == false) "继续" else "暂停"
         pause.visibility = if (mode == "视频地址") View.VISIBLE else View.GONE
         val visibleButtons = (0 until tools.childCount).map { tools.getChildAt(it) }.filterIsInstance<Button>().filter { it.visibility == View.VISIBLE }
@@ -177,7 +194,7 @@ class MainActivity : Activity() {
         }
         if (changed) {
             tools.visibility = View.GONE
-            if (mode == "等待") waitingDetails.requestFocus() else root.requestFocus()
+            if (mode == "等待") waiting.focusDefault() else root.requestFocus()
         }
     }
     private fun armHide() { main.removeCallbacks(hideTools); if (mode != "等待") main.postDelayed(hideTools, 6000) }
@@ -194,7 +211,7 @@ class MainActivity : Activity() {
         }
         if (dialog?.isShowing == true) return super.dispatchKeyEvent(event)
         if (event.keyCode == KeyEvent.KEYCODE_BACK) {
-            if (event.action == KeyEvent.ACTION_UP) returnToDlna()
+            if (event.action == KeyEvent.ACTION_UP) { if (mode != "等待") service?.restartReceiver() else standby() }
             return true
         }
         if (event.keyCode == KeyEvent.KEYCODE_MENU || event.keyCode == KeyEvent.KEYCODE_SETTINGS) {
@@ -233,7 +250,7 @@ class MainActivity : Activity() {
                     true
                 } else false
             }
-            setOnDismissListener { dialog = null; if (mode == "等待") waitingDetails.requestFocus() else { showTools(true) } }
+            setOnDismissListener { dialog = null; if (foreground) { if (mode == "等待") waitingDetails.requestFocus() else { showTools(true) } } }
             show()
         }
     }

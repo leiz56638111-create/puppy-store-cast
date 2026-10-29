@@ -12,6 +12,8 @@ class AudioRenderer {
     @Volatile var clientGain = 1f; private set
 
     private var serverHandle = 0L
+    private var outputAllowed = true
+    private var startRequested = false
 
     @Synchronized
     fun attachEngine(server: Long) {
@@ -23,22 +25,34 @@ class AudioRenderer {
     @Synchronized
     fun detachEngine() {
         serverHandle = 0L
+        startRequested = false
         codecLabel = ""
     }
 
     // open playout (first onAudioFormat, or resume after pause); idempotent natively
     @Synchronized
     fun start() {
-        if (serverHandle == 0L) return
+        startRequested = true
+        if (serverHandle == 0L || !outputAllowed) return
         NativeBridge.nativeServerAudioStart(serverHandle)
     }
 
     // releases oboe stream + audio device while idle; engine stays alive, freed on server destroy
     @Synchronized
     fun stop() {
+        startRequested = false
         if (serverHandle == 0L) return
         NativeBridge.nativeServerAudioStop(serverHandle)
         codecLabel = ""
+    }
+
+    // A background receiver can negotiate audio without opening a hidden output device.
+    @Synchronized
+    fun setOutputAllowed(allowed: Boolean) {
+        outputAllowed = allowed
+        if (serverHandle == 0L) return
+        if (allowed && startRequested) NativeBridge.nativeServerAudioStart(serverHandle)
+        else if (!allowed) NativeBridge.nativeServerAudioStop(serverHandle)
     }
 
     @Synchronized

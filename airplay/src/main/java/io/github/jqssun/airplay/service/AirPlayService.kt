@@ -20,6 +20,8 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
+import io.github.jqssun.airplay.ReceiverMode
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
@@ -194,14 +196,63 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     @Volatile private var audioFormatDescription = "尚未协商"
     @Volatile private var lastReset = "无"
 
+    @Volatile var presentationVisible = false; private set
+    @Volatile var pendingPresentation = false; private set
+    private var deferredVideoStart: Float? = null
+    private var pendingNotice = false
+    private val presentationTimeout = Runnable {
+        if (pendingPresentation && !presentationVisible && _serverState.value == ServerState.RUNNING) {
+            _restartServer()
+            pendingNotice = true
+            log("未能打开播放界面，已结束本次投送并继续待机；打开应用后请重新投送")
+            _updateMediaNotification()
+        }
+    }
+
+    /** The service owns discovery; the Activity only owns the visible display. Main thread only. */
+    fun setPresentationVisible(visible: Boolean) {
+        presentationVisible = visible
+        audioRenderer.setOutputAllowed(visible)
+        if (visible) {
+            pendingPresentation = false; pendingNotice = false
+            _mainHandler.removeCallbacks(presentationTimeout)
+            deferredVideoStart?.let { start ->
+                deferredVideoStart = null
+                _videoLocation.value?.let { airPlayVideoPlayer.play(it, start) }
+            }
+        } else if (_serverState.value == ServerState.RUNNING &&
+            (_videoPlaybackActive.value || _mirroringActive.value || _audioOnly.value || _connectionCount.value > 0)) {
+            // Home ends the old session, but advertises again for the next cast.
+            // This also prevents a hidden player from continuing or relaunching itself.
+            _restartServer()
+            log("播放界面已离开，结束当前会话并进入 AirPlay 后台待机")
+        }
+        if (_serverState.value == ServerState.RUNNING) _updateMediaNotification()
+    }
+
+    private fun requestPresentation() {
+        val expected = generation
+        _mainHandler.post {
+            if (!accepting || expected != generation || presentationVisible || pendingPresentation ||
+                (!_videoPlaybackActive.value && !_mirroringActive.value && !_audioOnly.value)) return@post
+            pendingPresentation = true; pendingNotice = true
+            _updateMediaNotification()
+            _mainHandler.postDelayed(presentationTimeout, 15_000)
+            // A foreground service itself does not grant background Activity-launch privileges.
+            if (Build.VERSION.SDK_INT < 29 || Settings.canDrawOverlays(this)) launchMainActivity()
+            else log("收到投送，请打开本应用播放；可在后台待机中授权自动打开")
+        }
+    }
+
     fun restartReceiver() { if (_serverState.value == ServerState.RUNNING) _restartServer() else startServer() }
 
     fun connectionDetails(): String = buildString {
         val d = collectDebugInfo()
-        append("小狗便利店投屏 1.0.0\n上游 jqssun/android-airplay-server v0.0.36 (a46cca0)\n")
+        append("小狗便利店投屏 1.0.1\n上游 jqssun/android-airplay-server v0.0.36 (a46cca0)\n")
         append("${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n")
         append("服务 ${_serverState.value} · 连接 ${d.connections} · 视频地址请求 $videoRequests\n")
         append("方式 ${if (_videoPlaybackActive.value) "视频地址 / HLS" else if (_mirroringActive.value) "视频流 / 屏幕镜像" else if (_audioOnly.value) "仅收到音频" else "等待"}\n")
+        append("后台待机 ${if (presentationVisible) "界面可见" else "后台"} · 待打开 $pendingPresentation\n")
         append("音频协商 $audioFormatDescription\n最近重置 $lastReset\n")
         append("${if (_mirroringActive.value) "视频流协商尺寸" else "镜像广播尺寸"} ${d.videoRes} · 解码器 ${d.videoCodec.ifEmpty { "尚未启动" }}\n输入帧 ${d.videoFrames} · 输入统计 ${d.videoFps} fps（非显示帧率）· 丢弃 ${d.droppedFrames}\n")
         _videoPlaybackSize.value?.let { append("直投视频 ${it.first}×${it.second}\n") }
@@ -250,6 +301,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
+        audioRenderer.setOutputAllowed(false)
         dacpController = DacpController(this)
         dacpPlayer = DacpPlayer(
             mainLooper,
@@ -382,12 +434,24 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         super.onStartCommand(intent, flags, startId)
-        if (intent?.action == ACTION_START_SERVER) {
-            promoteToForeground()
-            _startServer(ensureServiceStarted = false)
-            if (_serverState.value != ServerState.RUNNING) stopSelf(startId)
+        if (intent?.action == ACTION_STOP_SERVER) {
+            ReceiverMode.stopAirPlay(this)
+            stopServer()
+            return START_NOT_STICKY
         }
-        return START_NOT_STICKY
+        if (!ReceiverMode.wantsAirPlay(this)) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        // A sticky restart arrives without the original action. Only restore a mode
+        // explicitly left waiting by the user, never a receiver they exited/switched.
+        promoteToForeground()
+        _startServer(ensureServiceStarted = false)
+        if (_serverState.value != ServerState.RUNNING) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
+        return START_STICKY
     }
 
     fun startServer() {
@@ -572,6 +636,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     private fun _shutdown() {
         accepting = false
         generation++
+        _mainHandler.removeCallbacks(presentationTimeout)
+        pendingPresentation = false; pendingNotice = false; deferredVideoStart = null
         airPlayVideoPlayer.stop()
         audioRenderer.detachEngine()
         if (nativeHandle != 0L) {
@@ -657,6 +723,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
         // lingering polls after a stop must not bounce the UI back to a pending session
         _videoPollSuppressed = true
         _videoPlaybackActive.value = false
+        deferredVideoStart = null
+        if (!_mirroringActive.value && !_audioOnly.value) { pendingPresentation = false; _mainHandler.removeCallbacks(presentationTimeout) }
         airPlayVideoPlayer.stop()
         if (!_audioOnly.value) mediaSession?.isActive = false
         log(message)
@@ -702,7 +770,13 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
         _videoPlaybackSize.value = null
         _videoTitle.value = ""
         _videoPlaybackActive.value = true
-        airPlayVideoPlayer.play(location, start)
+        if (presentationVisible) airPlayVideoPlayer.play(location, start)
+        else {
+            deferredVideoStart = start
+            // Hold /play as not-yet-ready while waiting for a real display.
+            if (nativeHandle != 0L) NativeBridge.nativeUpdatePlaybackInfo(nativeHandle, start, 0f, 0f, false)
+            requestPresentation()
+        }
         // claim media-button routing for keys that arrive as media-session events
         mediaSession?.isActive = true
         log("收到视频播放请求 #$videoRequests，起点 ${start}s")
@@ -728,6 +802,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
             // pure music streaming (not screen mirroring audio)
             _setAudioOnly(true)
         }
+        if (!usingScreen) requestPresentation()
         log("Audio format: ct=$ct spf=$spf screen=$usingScreen")
     }
 
@@ -738,6 +813,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
             _videoResolution.value = "${w.toInt()}x${h.toInt()}"
             videoRenderer.setResolution(w.toInt(), h.toInt())
             _mirroringActive.value = true
+            requestPresentation()
         }
         log("Video size: ${srcW}x${srcH} -> ${w}x${h}")
     }
@@ -837,17 +913,20 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     }
 
     override fun onConnectionInit() {
-        val firstConnection = _connectionCount.value == 0
         _connectionCount.value++
         log("Sender connected (${_connectionCount.value})")
-        if (firstConnection && shouldLaunchOnConnect()) launchMainActivity()
+        // Connection probes must not raise the TV interface. Wait for media callbacks.
     }
 
     override fun onConnectionDestroy() {
         _connectionCount.value = (_connectionCount.value - 1).coerceAtLeast(0)
         if (_connectionCount.value == 0) {
             // clients may drop without POST /stop; must run before the poll-state reset
-            acceptVideo { if (_connectionCount.value == 0) _endVideoPlayback("AirPlay Video stopped (disconnect)") }
+            acceptVideo { if (_connectionCount.value == 0) {
+                _endVideoPlayback("AirPlay Video stopped (disconnect)")
+                deferredVideoStart = null; pendingPresentation = false
+                _mainHandler.removeCallbacks(presentationTimeout)
+            } }
             // last client gone: release audio output devices to save power
             audioRenderer.stop()
             _audioOnly.value = false
@@ -1133,10 +1212,6 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
         foregroundStarted = true
     }
 
-    private fun shouldLaunchOnConnect(): Boolean {
-        return prefs[Prefs.LAUNCH_ON_CONNECT]
-    }
-
     private fun _buildMediaNotification(): Notification {
         val intent = Intent(this, MainActivity::class.java)
         val pi = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE)
@@ -1147,6 +1222,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setContentIntent(pi)
             .setOngoing(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "退出接收",
+                PendingIntent.getService(this, 3, Intent(this, AirPlayService::class.java).setAction(ACTION_STOP_SERVER), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
 
         if (isAudio) {
             builder.setContentTitle(info.title).setContentText(info.artist).setSubText(info.album)
@@ -1155,7 +1232,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
                 builder.setStyle(
                     MediaNotificationCompat.MediaStyle()
                         .setMediaSession(token)
-                        .setShowActionsInCompactView(0, 1, 2)
+                        .setShowActionsInCompactView(1, 2, 3)
                 )
                 // transport action buttons
                 builder.addAction(android.R.drawable.ic_media_previous, "Prev", _mediaAction(ACTION_PREV))
@@ -1167,8 +1244,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
                 builder.setContentTitle(getString(R.string.notification_pin_title))
                     .setContentText(getString(R.string.notification_pin_text, _lastPin))
             } else {
-                builder.setContentTitle(getString(R.string.notification_title))
-                    .setContentText(getString(R.string.notification_text))
+                builder.setContentTitle("小狗便利店投屏 · AirPlay")
+                    .setContentText(if (pendingNotice) "已收到投送，请打开应用；会话超时后需重新投送" else if (presentationVisible) "AirPlay 已就绪" else "后台待机 · 等待 AirPlay 投屏")
             }
         }
         return builder.build()
@@ -1176,8 +1253,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
 
     private fun launchMainActivity() {
         Handler(Looper.getMainLooper()).post {
+            if (!accepting || !pendingPresentation || presentationVisible || !ReceiverMode.wantsAirPlay(this)) return@post
             val launchIntent = Intent(this, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
             try {
                 startActivity(launchIntent)
             } catch (e: Exception) {
@@ -1218,6 +1296,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
         const val ACTION_PLAY_PAUSE = "io.github.jqssun.airplay.PLAY_PAUSE"
         const val ACTION_NEXT = "io.github.jqssun.airplay.NEXT"
         const val ACTION_PREV = "io.github.jqssun.airplay.PREV"
+        const val ACTION_STOP_SERVER = "io.github.jqssun.airplay.STOP_SERVER"
         const val ACTION_START_SERVER = "io.github.jqssun.airplay.START_SERVER"
         // shared with dpad/double-tap seeks
         const val VIDEO_SEEK_STEP_MS = 10_000L

@@ -41,7 +41,12 @@ class AirPlayIntegrationTest {
         scenario = ActivityScenario.launch(MainActivity::class.java)
         await("receiver running") { var found = false; scenario.onActivity { it.service?.let { s -> service = s; found = s.serverState.value == AirPlayService.ServerState.RUNNING } }; found }
     }
-    @After fun close() { clients.forEach { runCatching { it.socket.close() } }; scenario.close() }
+    @After fun close() {
+        ReceiverMode.selectDlna(inst.targetContext)
+        clients.forEach { runCatching { it.socket.close() } }
+        scenario.close()
+        inst.targetContext.stopService(android.content.Intent(inst.targetContext, AirPlayService::class.java))
+    }
     private fun player(): ExoPlayer? = ui {
         service.airPlayVideoPlayer.javaClass.getDeclaredField("player").apply { isAccessible = true }.get(service.airPlayVideoPlayer) as? ExoPlayer
     }
@@ -102,11 +107,11 @@ class AirPlayIntegrationTest {
     }
     @Test fun remoteWaitingDetailsRestartAndAudioOnly() {
         await("initial focus") { label() == "连接详情" }
-        press(KeyEvent.KEYCODE_DPAD_DOWN); assertEquals("重新连接", label())
-        press(KeyEvent.KEYCODE_DPAD_RIGHT); assertEquals("返回 DLNA", label())
+        press(KeyEvent.KEYCODE_DPAD_RIGHT); assertEquals("重新连接", label())
+        press(KeyEvent.KEYCODE_DPAD_RIGHT); assertEquals("退出接收", label())
         press(KeyEvent.KEYCODE_DPAD_LEFT); assertEquals("重新连接", label())
         press(KeyEvent.KEYCODE_DPAD_CENTER); await("restart works") { ui { service.serverState.value == AirPlayService.ServerState.RUNNING } }
-        press(KeyEvent.KEYCODE_DPAD_UP); assertEquals("连接详情", label())
+        press(KeyEvent.KEYCODE_DPAD_LEFT); assertEquals("连接详情", label())
         press(KeyEvent.KEYCODE_DPAD_CENTER); assertTrue(popup()); screenshot("details.png")
         press(KeyEvent.KEYCODE_DPAD_DOWN); press(KeyEvent.KEYCODE_DPAD_CENTER); assertFalse(popup())
         service.onAudioFormat(2, 352, false)
@@ -185,12 +190,133 @@ class AirPlayIntegrationTest {
             assertTrue("Bonjour must publish unified receiver name", found)
         }
     }
-    @Test fun homeStopsAndReopenStarts() {
+    @Test fun homeKeepsDiscoveryAndReopenReusesService() {
         val old = service
         scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
-        await("Home stops receiver") { old.serverState.value == AirPlayService.ServerState.STOPPED }
-        assertEquals(0, old.connectionCount.value)
+        await("Home keeps receiver") { old.serverState.value == AirPlayService.ServerState.RUNNING && !old.presentationVisible }
+        assertEquals(200, client().send("GET", "/server-info").status)
+        bonjourReplyContainsUnifiedName()
         scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
         await("reopen starts receiver") { var ready = false; scenario.onActivity { ready = it.service?.serverState?.value == AirPlayService.ServerState.RUNNING }; ready }
     }
+    private fun shell(command: String) = inst.uiAutomation.executeShellCommand(command).use { fd ->
+        ParcelFileDescriptor.AutoCloseInputStream(fd).use { String(it.readBytes()) }
+    }
+    @Test fun backgroundProbeDoesNotRaiseUiAndVideoWaitsForManualOpen() {
+        shell("appops set cn.local.livingroomcast SYSTEM_ALERT_WINDOW deny")
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        val w = client()
+        assertEquals(200, w.send("GET", "/server-info").status)
+        Thread.sleep(500)
+        assertFalse(service.presentationVisible); assertFalse(service.pendingPresentation)
+        val result = java.util.concurrent.CompletableFuture.supplyAsync {
+            w.send("POST", "/play", "Content-Location: http://10.0.2.2:18099/video.mp4\r\nStart-Position: 0\r\n".toByteArray())
+        }
+        await("background video is pending") { service.pendingPresentation && service.videoPlaybackActive.value }
+        assertNull("no hidden video player", player())
+        assertFalse(service.presentationVisible)
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        assertEquals(200, result.get(12, TimeUnit.SECONDS).status)
+        await("manual reopen renders video") { ui { service.presentationVisible && service.airPlayVideoPlayer.renderedFirstFrame && player()?.isPlaying == true } }
+        pixelCopy("video")
+        screenshot("background-manual-open.png")
+    }
+    @Test fun grantedBackgroundVideoOpensExistingActivityAndRenders() {
+        shell("appops set cn.local.livingroomcast SYSTEM_ALERT_WINDOW allow")
+        try {
+            val old = service
+            scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+            val w = client()
+            assertEquals(200, w.send("POST", "/play", "Content-Location: http://10.0.2.2:18099/video.mp4\r\nStart-Position: 0\r\n".toByteArray()).status)
+            await("authorized background launch") { ui { service.presentationVisible && player()?.isPlaying == true && service.airPlayVideoPlayer.renderedFirstFrame } }
+            assertSame(old, service)
+            pixelCopy("video"); screenshot("background-auto-open.png")
+        } finally { shell("appops set cn.local.livingroomcast SYSTEM_ALERT_WINDOW deny") }
+    }
+    @Test fun backgroundPendingTimeoutDropsSessionAndKeepsWaiting() {
+        shell("appops set cn.local.livingroomcast SYSTEM_ALERT_WINDOW deny")
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        service.onVideoPlay("http://10.0.2.2:18099/video.mp4", 0f)
+        await("pending starts") { service.pendingPresentation }
+        assertNull(player())
+        await("pending times out without hidden video") { !service.pendingPresentation && !service.videoPlaybackActive.value && service.serverState.value == AirPlayService.ServerState.RUNNING }
+        assertNull(player()); assertFalse(service.presentationVisible)
+        assertEquals(200, client().send("GET", "/server-info").status)
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+    }
+    @Test fun homeDuringVideoEndsSessionButKeepsServerAndAudioGated() {
+        play(client())
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        await("Home ends visible media") { !service.videoPlaybackActive.value && player() == null && service.serverState.value == AirPlayService.ServerState.RUNNING }
+        val output = service.audioRenderer.javaClass.getDeclaredField("outputAllowed").apply { isAccessible = true }
+        assertFalse(output.getBoolean(service.audioRenderer))
+        assertFalse(service.presentationVisible)
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        await("reopen is idle") { service.presentationVisible }
+        assertFalse(service.videoPlaybackActive.value)
+        play(client()); pixelCopy("video")
+    }
+    @Test fun backgroundNotificationExitStopsDiscoveryAndDisablesStickyRestore() {
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        val manager = inst.targetContext.getSystemService(android.app.NotificationManager::class.java)
+        val notification = manager.activeNotifications.single { it.id == 1 }.notification
+        notification.actions.single { it.title.toString() == "退出接收" }.actionIntent.send()
+        await("notification stops server") { service.serverState.value == AirPlayService.ServerState.STOPPED }
+        assertFalse(ReceiverMode.wantsAirPlay(inst.targetContext))
+        await("notification removed") { manager.activeNotifications.none { it.id == 1 } }
+    }
+
+    @Test fun backgroundMirrorWaitsForDisplayAndReattachesWithAudioGate() {
+        shell("appops set cn.local.livingroomcast SYSTEM_ALERT_WINDOW deny")
+        val units = H264TestStream.asAirPlayShaped(H264TestStream.encode(320, 180, 24))
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        service.onMirrorRunning(true)
+        service.onAudioFormat(8, 480, true)
+        service.onVideoSize(320f, 180f, 320f, 180f)
+        await("mirror pending in background") { service.pendingPresentation && service.mirroringActive.value }
+        val gate = service.audioRenderer.javaClass.getDeclaredField("outputAllowed").apply { isAccessible = true }
+        assertFalse(gate.getBoolean(service.audioRenderer))
+        for (unit in units) { service.onVideoData(unit.bytes, System.nanoTime() + unit.presentationTimeUs * 1000, false); Thread.sleep(30) }
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        await("mirror attaches after manual open") { service.presentationVisible }
+        assertTrue(gate.getBoolean(service.audioRenderer))
+        for (unit in units) { service.onVideoData(unit.bytes, System.nanoTime() + unit.presentationTimeUs * 1000, false); Thread.sleep(30) }
+        pixelCopy("mirror"); screenshot("background-mirror.png")
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        await("leaving mirror ends it and keeps standby") { !service.mirroringActive.value && service.serverState.value == AirPlayService.ServerState.RUNNING }
+        assertFalse(gate.getBoolean(service.audioRenderer))
+    }
+    @Test fun stopCancelsQueuedBackgroundVideoWithoutOpeningOrPlayingLater() {
+        shell("appops set cn.local.livingroomcast SYSTEM_ALERT_WINDOW deny")
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.CREATED)
+        ui { service.onVideoPlay("http://10.0.2.2:18099/video.mp4", 0f); service.onVideoStop() }
+        Thread.sleep(800)
+        assertFalse(service.pendingPresentation); assertFalse(service.videoPlaybackActive.value); assertNull(player())
+        scenario.moveToState(androidx.lifecycle.Lifecycle.State.RESUMED)
+        assertFalse(service.videoPlaybackActive.value); assertNull(player())
+    }
+
+    @Test fun firstTouchPausesResumesAndRemoteStillWorksAfterTouch() {
+        play(client())
+        fun tap(target: View) {
+            val xy = ui { IntArray(2).also { target.getLocationOnScreen(it); it[0] += target.width / 2; it[1] += target.height / 2 } }
+            val down = SystemClock.uptimeMillis()
+            for (action in intArrayOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(down, SystemClock.uptimeMillis(), action, xy[0].toFloat(), xy[1].toFloat(), 0)
+                event.source = InputDevice.SOURCE_TOUCHSCREEN
+                inst.sendPointerSync(event); event.recycle()
+            }
+            inst.waitForIdleSync()
+        }
+        tap(view("video"))
+        await("touch reveals controls") { ui { view("tools").visibility == View.VISIBLE } }
+        tap(view("pause")); await("first tap pauses AirPlay") { !service.videoPlaybackInfo.value.playing }
+        tap(view("pause")); await("one tap resumes AirPlay") { service.videoPlaybackInfo.value.playing }
+        await("resumed button label is rendered") { ui { (view("pause") as Button).text.toString() == "暂停" } }
+        tap(view("playbackDetails")); await("one tap opens details") { popup() }
+        press(KeyEvent.KEYCODE_DPAD_CENTER); assertFalse(popup())
+        press(KeyEvent.KEYCODE_DPAD_RIGHT); assertEquals("暂停", label())
+        press(KeyEvent.KEYCODE_DPAD_CENTER); await("remote works after touch") { !service.videoPlaybackInfo.value.playing }
+    }
+
 }

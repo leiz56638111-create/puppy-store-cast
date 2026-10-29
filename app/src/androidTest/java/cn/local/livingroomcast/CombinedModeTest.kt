@@ -17,6 +17,8 @@ import androidx.test.runner.lifecycle.Stage
 import io.github.jqssun.airplay.service.AirPlayService
 import io.github.jqssun.airplay.MainActivity as AirPlayActivity
 import io.github.jqssun.airplay.AirPlaySupport
+import io.github.jqssun.airplay.ReceiverMode
+import org.junit.Before
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Test
@@ -52,7 +54,7 @@ class CombinedModeTest {
         else -> emptyList()
     }
     private fun click(activity: Activity, label: String) = ui {
-        val button = buttons(activity.window.decorView).single { it.text.toString() == label }
+        val button = buttons(activity.window.decorView).single { it.text.toString() == label || it.contentDescription?.toString() == label }
         assertTrue("Button $label is enabled", button.isEnabled); button.performClick()
     }
     private fun airPlayRunning(): Boolean = ui { (current() as? AirPlayActivity)?.service?.serverState?.value == AirPlayService.ServerState.RUNNING }
@@ -78,7 +80,9 @@ class CombinedModeTest {
         try { assertEquals(200, connection.responseCode); return connection.inputStream.bufferedReader().use { it.readText() } }
         finally { connection.disconnect() }
     }
+    @Before fun resetMode() { ReceiverMode.selectDlna(context) }
     @After fun close() {
+        ReceiverMode.selectDlna(context)
         current()?.takeIf { it !is MainActivity }?.let { activity -> ui { activity.finish() } }
         scenario?.close()
         context.stopService(Intent(context, ReceiverService::class.java))
@@ -91,25 +95,29 @@ class CombinedModeTest {
         val intent=Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER).setPackage(context.packageName)
         assertEquals(1, context.packageManager.queryIntentActivities(intent, 0).size)
         val info = context.packageManager.getPackageInfo(context.packageName, 0)
-        assertEquals("1.0.0", info.versionName)
-        assertEquals(10L, info.longVersionCode)
+        assertEquals("1.0.1", info.versionName)
+        assertEquals(11L, info.longVersionCode)
         assertEquals(23, info.applicationInfo!!.minSdkVersion)
         assertFalse(AirPlaySupport.isSupported(23, arrayOf("arm64-v8a")))
         assertFalse(AirPlaySupport.isSupported(31, arrayOf("x86_64")))
         assertTrue(AirPlaySupport.isSupported(24, arrayOf("armeabi-v7a")))
     }
-    @Test fun homeStopsAirPlayAndLauncherRestoresDlna() {
+    @Test fun homeKeepsAirPlayAndLauncherRestoresItsMode() {
         val dlna = open()
         click(dlna,"AirPlay")
         await("mirror did not start") { current() is AirPlayActivity && airPlayRunning() }
+        val old = (current() as AirPlayActivity).service
         inst.uiAutomation.executeShellCommand("input keyevent KEYCODE_HOME").use { fd ->
             android.os.ParcelFileDescriptor.AutoCloseInputStream(fd).use { it.readBytes() }
         }
-        await("Home leaked AirPlay") { !airPlayPortOpen() && notificationIds().isEmpty() }
+        await("Home lost AirPlay") { airPlayPortOpen() && notificationIds() == setOf(1) && !ui { old!!.presentationVisible } }
         ui { context.startActivity(Intent(context,MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }
-        await("launcher did not restore DLNA") { current() is MainActivity && receiver(current()!!)?.let { ui { it.ui().endpoint().isNotEmpty() } } == true }
-        await("DLNA did not advertise after Home") { notificationIds() == setOf(41) }
-        assertFalse(airPlayRunning())
+        await("launcher did not restore AirPlay") { current() is AirPlayActivity && airPlayRunning() }
+        assertSame(old, (current() as AirPlayActivity).service)
+        assertEquals(setOf(1), notificationIds())
+        click(current()!!,"返回 DLNA")
+        await("explicit switch did not restore DLNA") { current() is MainActivity && receiver(current()!!)?.let { ui { it.ui().endpoint().isNotEmpty() } } == true }
+        await("AirPlay did not stop after switching") { !airPlayPortOpen() && notificationIds() == setOf(41) }
     }
     @Test fun repeatedlySwitchingModesReleasesThePreviousServiceAndPreservesIdentity() {
         val dlna = open()
@@ -133,15 +141,33 @@ class CombinedModeTest {
             if (index > 0) await("DLNA host did not reach stopped state") {
                 ui { ActivityLifecycleMonitorRegistry.getInstance().getActivitiesInStage(Stage.STOPPED).contains(dlna) }
             }
-            if (index == 0) {
-                // First trip can return before the DLNA host has reached onStop.
-                ui { mirror.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_BACK))
-                    mirror.dispatchKeyEvent(android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_BACK)) }
-            } else click(mirror,"返回 DLNA")
+            click(mirror,"返回 DLNA")
             await("DLNA did not resume") { current() === dlna && receiver(dlna)?.let { ui { it.ui().endpoint().isNotEmpty() } } == true }
             await("AirPlay resources not released") { !airPlayPortOpen() && notificationIds() == setOf(41) }
             assertEquals(identity, preferences.getString("uuid", ""))
             assertEquals(1f, ui { receiver(dlna)!!.playback().speed() })
         }
     }
+    @Test fun waitingRemoteNavigationRevealsActionsAndReturnsToModePicker() {
+        val activity = open()
+        val lobby = ui { MainActivity::class.java.getDeclaredField("waitingPane").apply { isAccessible = true }.get(activity) as io.github.jqssun.airplay.ui.NightLobby }
+        fun key(code: Int) {
+            val now = SystemClock.uptimeMillis()
+            for (action in intArrayOf(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.ACTION_UP))
+                inst.sendKeySync(android.view.KeyEvent(now, SystemClock.uptimeMillis(), action, code, 0, 0, android.view.KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0, android.view.InputDevice.SOURCE_DPAD))
+        }
+        fun focusedAndVisible(button: Button): Boolean = ui {
+            val rect=android.graphics.Rect()
+            activity.currentFocus === button && button.getGlobalVisibleRect(rect) && rect.height() >= button.height * .9
+        }
+        ui { lobby.dlnaButton.requestFocus() }
+        key(android.view.KeyEvent.KEYCODE_DPAD_DOWN)
+        await("Down must reach visible standby button") { focusedAndVisible(lobby.standbyButton) }
+        key(android.view.KeyEvent.KEYCODE_DPAD_RIGHT)
+        await("Right must reach visible details button") { focusedAndVisible(lobby.detailsButton) }
+        key(android.view.KeyEvent.KEYCODE_DPAD_UP)
+        await("Up must return to visible mode picker") { focusedAndVisible(lobby.airplayButton) }
+        capture("combined-navigation.png")
+    }
+
 }

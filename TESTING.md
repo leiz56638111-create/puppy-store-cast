@@ -121,3 +121,26 @@ adb shell am instrument -w cn.local.livingroomcast.test/cn.local.livingroomcast.
 较小触摸屏 960×540、density 240 下另复测 3 个合并生命周期／模式检查与 61 个播放控制检查。主等待页通过原 ScrollView 保留完整入口，小屏需向下滚动显示 AirPlay 按钮；镜像横向按钮行也可滚动。
 
 最终打包给宿主显式指定与镜像库相同的 NDK 28.2.13676358，移除原生调试信息中的本机路径。两个 ABI 去除调试信息前后所有 SHF_ALLOC 段（实际加载的代码与数据）一致；最终 APK 另重跑镜像／模式与播放控制检查，交付校验拒绝本机路径或签名私钥。
+
+
+## 1.0.1 夜色界面与 AirPlay 后台待机（2026-10-29）
+
+本轮将旧的“Home停AirPlay／图标恢复DLNA”断言改为：Home保留AirPlay、图标恢复当前模式、显式切换才停止旧协议。AirPlayIntegrationTest覆盖实际MP4／HLS／反向HLS、镜像持久Surface、遥控器、Bonjour，以及无授权手动恢复、有授权自动打开、后台镜像显示重挂、音频输出门控、未展示超时、Stop取消、通知退出。CombinedModeTest覆盖版本／单Launcher、模式恢复与重复切换。
+
+先执行 `bash build-local.sh`，再构建 `:app:assembleDebugAndroidTest`，使用专用模拟器运行：
+
+```sh
+python3 tests/run_airplay_video.py --serial emulator-5560 --adb /path/to/adb --output verification/airplay-1.0.1
+python3 tests/run_airplay_video.py --serial emulator-5560 --adb /path/to/adb --output verification/modes-1.0.1 --test cn.local.livingroomcast.CombinedModeTest
+```
+
+测试会改变专用模拟器内本应用的悬浮窗AppOp，不应直接用于日常真实设备。AirPlay后台镜像为回调注入，不是完整iPhone握手；自动拉起结果仍需在Sony和目标Android版本验证。DLNA原生Playback／Quality／Standby入口保留。版本交付的实际测试数与证据见验收记录。
+
+
+### 1.0.1 交付检查结果
+
+Android 12 / API31 ARM64：17 个 AirPlay 检查、4 个合并模式／遥控导航检查，以及 DLNA 61 个播放控制、38 个画质／信息层、28 个后台待机检查通过。960×540／density240 小屏另通过 4 个模式／遥控导航与 61 个播放控制检查。
+
+29 个协议、10 个格式、8 个画质模型及 2 个 AirPlay 单元检查通过；两个模块 Lint 均 0 错误（app 14 警告、airplay 25 警告）。已实际覆盖升级 1.0.0→1.0.1，保留 DLNA UUID 与已有 AirPlay 身份文件；模拟器内终止进程后，系统恢复待机，明确退出后不自动恢复。该进程终止不是系统设置中的“强制停止”。
+
+原生六个共享库与 1.0.0 逐字节一致。后台镜像使用回调注入和实际 Surface 出图；真实 Apple／Sony、长时间待机、声画同步、耗电、32 位与 API23 运行仍待真机，不将模拟器结果写成全部 App 已兼容。
