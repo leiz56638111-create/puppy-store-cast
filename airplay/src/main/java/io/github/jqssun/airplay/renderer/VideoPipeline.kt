@@ -146,6 +146,11 @@ class VideoPipeline {
     }
 
     private fun _render() {
+        val currentEgl = egl ?: return
+        // EGL window dimensions can change without a new Android Surface object.
+        winW = currentEgl.query(window, EGL14.EGL_WIDTH)
+        winH = currentEgl.query(window, EGL14.EGL_HEIGHT)
+        if (winW <= 0 || winH <= 0) return
         GLES20.glViewport(0, 0, winW, winH)
         GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
         GLES20.glUseProgram(program)

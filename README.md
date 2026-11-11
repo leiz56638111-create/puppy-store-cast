@@ -1,10 +1,10 @@
-# 小狗便利店投屏 · 1.0.1
+# 小狗便利店投屏 · 1.0.2
 
-安卓电视／平板上的 DLNA 与 AirPlay 接收端。一个安装包、一个图标，原包名 `cn.local.livingroomcast` 和签名不变，可以覆盖1.0.0或旧主版。无账号、广告、订阅或人为播放时长限制，GPL-3.0开源。
+安卓电视／平板上的 DLNA 与 AirPlay 接收端。一个安装包、一个图标，原包名 `cn.local.livingroomcast` 和签名不变，可以覆盖1.0.1或旧主版。无账号、广告、订阅或人为播放时长限制，GPL-3.0开源。
 
-1.0.1 的两项更新是“夜色客厅”界面与 AirPlay 后台待机。两个模式共用等待页，地址与诊断收进连接详情；进入 AirPlay 后按 Home 继续待机，再开图标回到当前模式。左上方“视频 App”切回 DLNA；模式仍互斥。完整使用方式见 [1.0.1 说明](docs/1.0.1.md)。
+1.0.2 修复AirPlay镜像缩放、横竖屏及显示区域变化时的画面裁切，增加遥控器可操作的画面大小设置和连接诊断。保留“夜色客厅”与DLNA/AirPlay后台待机，两模式仍互斥。使用方式见[1.0.2说明](docs/1.0.2.md)。VPN可能影响局域网连接，遇到搜得到但连不上时可先临时断开VPN对照。
 
-下载 [1.0.1 APK](https://github.com/leiz56638111-create/puppy-store-cast/releases/download/v1.0.1/PuppyStoreCast-1.0.1.apk)，或查看 [发布说明、对应源码与校验文件](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.1)。[1.0.0](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.0) 和旧独立实验包保持不变。自行构建方式见下方。
+1.0.2当前为本地构建版本，尚未上传GitHub。此前公开下载见[1.0.1发布页](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.1)。历史独立包保留。
 
 ![1.0.1 首页](docs/images/waiting-1.0.1.png)
 
@@ -24,7 +24,7 @@
 
 ## 安装与使用
 
-1. 将PuppyStoreCast-1.0.1.apk拷到U盘，通过电视文件管理器安装，可直接覆盖旧主版。
+1. 将PuppyStoreCast-1.0.2.apk拷到U盘，通过电视文件管理器安装，可直接覆盖旧主版。
 2. 打开“小狗便利店投屏”，发送端与电视连接同一家庭局域网。
 3. 安卓视频App：点TV／投屏，选择“小狗便利店投屏”。
 4. iPhone／iPad：先点电视首页的“AirPlay”，再从相册视频或视频App内选择隔空播放，或从控制中心选择屏幕镜像；设备名均为“小狗便利店投屏”。
@@ -42,7 +42,7 @@
 - 4K60/HDR、游戏延迟、长期声画同步、历史无声与横向花屏问题仍需真机验收，不因版本号更新而视为全部解决。
 - 同网发现可能受访客网络、AP隔离和Mesh组播策略影响；局域网DLNA控制没有配对认证，不应映射到公网。
 
-1.0.1 [社媒海报](docs/images/poster-1.0.1.png)与[功能介绍](docs/release-1.0.1-intro.md)；1.0.0历史海报和介绍保留。
+1.0.2 [社媒海报](docs/images/poster-1.0.2.png)与[功能介绍](docs/release-1.0.2-intro.md)；1.0.0历史海报和介绍保留。
 
 ## 构建
 

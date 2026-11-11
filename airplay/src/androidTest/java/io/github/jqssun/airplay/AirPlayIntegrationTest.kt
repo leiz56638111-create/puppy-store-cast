@@ -159,6 +159,62 @@ class AirPlayIntegrationTest {
         await("proxied HLS decoded") { val p = player(); p != null && ui { p.isPlaying && service.airPlayVideoPlayer.renderedFirstFrame && (p.videoDecoderCounters?.renderedOutputBufferCount ?: 0) > 0 } }
         pixelCopy("video"); screenshot("reverse-hls.png")
     }
+    @Test fun controlPortReceivesInfoAndRecordsStage() {
+        val w = client()
+        w.socket.getOutputStream().apply { write("GET /info RTSP/1.0\r\nCSeq: 1\r\nContent-Length: 0\r\n\r\n".toByteArray()); flush() }
+        assertEquals(200, w.read().status)
+        await("protocol stage recorded") { service.connectionDetails().contains("handler returned info") }
+        assertTrue(service.connectionDetails().contains("实际监听端口 7000"))
+    }
+    @Test fun mirrorKeepsAllFourEdgesAcrossResizeAndRotation() {
+        fun checkEdges() {
+            val bitmap = Bitmap.createBitmap(200, 160, Bitmap.Config.ARGB_8888)
+            val done = CountDownLatch(1); var result = -1
+            ui { PixelCopy.request(view("mirror") as SurfaceView, bitmap, { result = it; done.countDown() }, Handler(Looper.getMainLooper())) }
+            assertTrue(done.await(5, TimeUnit.SECONDS)); assertEquals(PixelCopy.SUCCESS, result)
+            for ((x,y) in listOf(10 to 8, 190 to 8, 10 to 152, 190 to 152, 100 to 8, 100 to 152, 10 to 80, 190 to 80)) {
+                val c=bitmap.getPixel(x,y)
+                assertTrue("missing edge at $x,$y", ((c shr 16) and 255)>160 && ((c shr 8) and 255)>160)
+            }
+            bitmap.recycle()
+        }
+        fun changeScale(percent: Int) {
+            scenario.onActivity { a ->
+                a.getPreferences(android.content.Context.MODE_PRIVATE).edit().putInt("mirror_scale",percent).commit()
+                a.javaClass.getDeclaredField("lastAspect").apply { isAccessible=true }.setFloat(a,0f)
+                a.javaClass.getDeclaredMethod("render").apply { isAccessible=true }.invoke(a)
+            }
+            inst.waitForIdleSync(); Thread.sleep(300)
+        }
+        for ((w,h) in listOf(320 to 240, 240 to 320, 320 to 180)) {
+            val units=H264TestStream.asAirPlayShaped(H264TestStream.encode(w,h,24,border=true))
+            service.onMirrorRunning(true); service.onVideoSize(w.toFloat(),h.toFloat(),w.toFloat(),h.toFloat())
+            await("mirror visible") { ui { view("mirror").visibility==View.VISIBLE && (view("mirror") as SurfaceView).holder.surface.isValid } }
+            changeScale(100)
+            for (unit in units) { service.onVideoData(unit.bytes,System.nanoTime()+unit.presentationTimeUs*1000,false); Thread.sleep(30) }
+            Thread.sleep(300); checkEdges()
+            // Repaint the retained frame without sending another source frame.
+            changeScale(80); checkEdges()
+            changeScale(100); checkEdges()
+        }
+    }
+    @Test fun mirrorScaleCanBeChangedAndRestored() {
+        service.onMirrorRunning(true); service.onVideoSize(320f, 180f, 320f, 180f)
+        await("mirror surface") { ui { view("mirror").visibility == View.VISIBLE && view("mirror").width > 0 } }
+        val original = ui { view("mirror").layoutParams.width }
+        press(KeyEvent.KEYCODE_DPAD_CENTER)
+        press(KeyEvent.KEYCODE_DPAD_RIGHT)
+        assertEquals("画面大小", label())
+        press(KeyEvent.KEYCODE_DPAD_CENTER)
+        await("scale dialog") { popup() }
+        scenario.onActivity { a ->
+            val d = a.javaClass.getDeclaredField("dialog").apply { isAccessible = true }.get(a) as AlertDialog
+            d.listView.performItemClick(d.listView.getChildAt(2), 2, d.listView.adapter.getItemId(2))
+        }
+        await("mirror shrank") { ui { view("mirror").layoutParams.width < original } }
+        assertEquals(80, ui { var n=0; scenario.onActivity { n=it.getPreferences(android.content.Context.MODE_PRIVATE).getInt("mirror_scale",0) }; n })
+        scenario.onActivity { a -> a.getPreferences(android.content.Context.MODE_PRIVATE).edit().remove("mirror_scale").commit() }
+    }
     @Test fun persistentMirrorSurfaceRendersAndRemoteEnds() {
         val units = H264TestStream.asAirPlayShaped(H264TestStream.encode(320, 180, 24))
         service.onMirrorRunning(true); service.onVideoSize(320f, 180f, 320f, 180f)
@@ -171,8 +227,8 @@ class AirPlayIntegrationTest {
         assertSame("display surface replacement retains decoder", codec, service.videoRenderer.javaClass.getDeclaredField("codec").apply { isAccessible = true }.get(service.videoRenderer))
         pixelCopy("mirror")
         press(KeyEvent.KEYCODE_DPAD_CENTER); assertEquals("连接详情", label())
-        press(KeyEvent.KEYCODE_DPAD_RIGHT); assertEquals("结束接收", label()); press(KeyEvent.KEYCODE_DPAD_CENTER)
-        await("end returns to waiting") { !service.mirroringActive.value && label() == "连接详情" }
+        press(KeyEvent.KEYCODE_DPAD_RIGHT); assertEquals("画面大小", label()); press(KeyEvent.KEYCODE_DPAD_RIGHT); assertEquals("结束接收", label()); press(KeyEvent.KEYCODE_DPAD_CENTER)
+        await("end returns to waiting") { !service.mirroringActive.value && view("mirror").visibility != View.VISIBLE }
     }
     @Test fun bonjourReplyContainsUnifiedName() {
         val group = java.net.InetAddress.getByName("224.0.0.251")

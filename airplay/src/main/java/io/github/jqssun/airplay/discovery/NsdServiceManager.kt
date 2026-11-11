@@ -8,7 +8,7 @@ import android.util.Log
 
 data class MdnsService(val name: String, val type: String, val port: Int, val txt: Map<String, String>)
 
-class NsdServiceManager(private val ctx: Context) {
+class NsdServiceManager(private val ctx: Context, private val event: (String) -> Unit = {}) {
 
     private val nsdManager = ctx.getSystemService(Context.NSD_SERVICE) as NsdManager
     private var multicastLock: WifiManager.MulticastLock? = null
@@ -33,10 +33,10 @@ class NsdServiceManager(private val ctx: Context) {
         }
         val listener = object : NsdManager.RegistrationListener {
             override fun onServiceRegistered(info: NsdServiceInfo) {
-                Log.i(TAG, "${s.type} registered: ${info.serviceName}")
+                Log.i(TAG, "${s.type} registered: ${info.serviceName}"); event("发现广播已注册 ${s.type} · 端口 ${s.port}")
             }
             override fun onRegistrationFailed(info: NsdServiceInfo, code: Int) {
-                Log.e(TAG, "${s.type} registration failed: $code")
+                Log.e(TAG, "${s.type} registration failed: $code"); event("发现广播注册失败 ${s.type} · 错误 $code")
             }
             override fun onServiceUnregistered(info: NsdServiceInfo) {
                 Log.i(TAG, "${s.type} unregistered")

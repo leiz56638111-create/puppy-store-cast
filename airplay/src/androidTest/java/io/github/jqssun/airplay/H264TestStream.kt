@@ -15,7 +15,7 @@ class TestAccessUnit(val bytes: ByteArray, val presentationTimeUs: Long, val isC
  */
 object H264TestStream {
 
-    fun encode(width: Int, height: Int, frameCount: Int, fps: Int = 30): List<TestAccessUnit> {
+    fun encode(width: Int, height: Int, frameCount: Int, fps: Int = 30, border: Boolean = false): List<TestAccessUnit> {
         val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         val colorFormat = pickColorFormat(encoder)
         val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height)
@@ -40,7 +40,7 @@ object H264TestStream {
                     if (index >= 0) {
                         val input = encoder.getInputBuffer(index)!!
                         input.clear()
-                        writeFrame(input, width, height, framesQueued, colorFormat)
+                        writeFrame(input, width, height, framesQueued, colorFormat, border)
                         val endOfStream = framesQueued == frameCount + 1
                         encoder.queueInputBuffer(
                             index, 0, input.position().takeIf { it > 0 } ?: frameSize(width, height, colorFormat),
@@ -111,12 +111,13 @@ object H264TestStream {
         width * height * 3 / 2
 
     /** A moving vertical bar, so successive frames actually differ. */
-    private fun writeFrame(buffer: ByteBuffer, width: Int, height: Int, index: Int, colorFormat: Int) {
+    private fun writeFrame(buffer: ByteBuffer, width: Int, height: Int, index: Int, colorFormat: Int, border: Boolean) {
         val luma = ByteArray(width * height)
         val barX = (index * 11) % width
         for (y in 0 until height) {
             for (x in 0 until width) {
-                val near = kotlin.math.abs(x - barX) < 24
+                val edge = border && (x < width / 10 || x >= width * 9 / 10 || y < height / 10 || y >= height * 9 / 10)
+                val near = edge || (!border && kotlin.math.abs(x - barX) < 24)
                 luma[y * width + x] = if (near) 235.toByte() else 16.toByte()
             }
         }

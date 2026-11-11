@@ -276,7 +276,7 @@ public final class MainActivity extends Activity {
         String message="等待接收服务启动。";
         if(service!=null) {
             ReceiverService.Ui u=service.ui();
-            message="小狗便利店投屏 1.0.1\n电视：" + Build.MANUFACTURER + " " + Build.MODEL + "\nAndroid " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT
+            message="小狗便利店投屏 1.0.2\n电视：" + Build.MANUFACTURER + " " + Build.MODEL + "\nAndroid " + Build.VERSION.RELEASE + " / API " + Build.VERSION.SDK_INT
                     + "\n接收器：" + (u.endpoint().isEmpty()?"尚未就绪":u.endpoint())
                     + "\n当前画质：" + u.quality() + " · " + u.qualityMode()
                     + "\n播放速度：" + ReceiverService.speedLabel(service.playback().speed())

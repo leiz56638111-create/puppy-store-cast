@@ -136,6 +136,9 @@ class VideoRenderer(ctx: Context) {
 
             try {
                 if (codec == null) startCodec(isH265)
+                // Drain ready output before feeding another compressed frame. Never discard
+                // encoded reference frames merely to reduce latency.
+                drainOutput()
                 _feedToCodec(data, ntpTimeNs)
                 drainOutput()
             } catch (e: Exception) {

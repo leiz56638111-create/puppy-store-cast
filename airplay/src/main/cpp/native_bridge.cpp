@@ -35,11 +35,10 @@ typedef struct {
 } server_ctx_t;
 
 static void _log_callback(void *cls, int level, const char *msg) {
-    int prio = ANDROID_LOG_DEBUG;
-    if (level <= LOGGER_ERR) prio = ANDROID_LOG_ERROR;
-    else if (level == LOGGER_WARNING) prio = ANDROID_LOG_WARN;
-    else if (level <= LOGGER_INFO) prio = ANDROID_LOG_INFO;
-    __android_log_print(prio, TAG, "%s", msg);
+    auto *ctx = static_cast<server_ctx_t *>(cls);
+    if (!ctx || !ctx->log) return;
+    if (!strncmp(msg, "PuppyStage:", 11)) ctx->log->info("%s", msg);
+    else if (level <= LOGGER_ERR) ctx->log->error("AirPlay protocol error (native); stage above");
 }
 
 extern "C"
@@ -68,8 +67,10 @@ Java_io_github_jqssun_airplay_bridge_NativeBridge_nativeInit(
     }
     ctx->cb_ctx.raop = ctx->raop;
 
-    raop_set_log_level(ctx->raop, LOGGER_ERR);
-    raop_set_log_callback(ctx->raop, _log_callback, NULL);
+    ctx->log = std::make_shared<LogSink>();
+    ctx->log->bind(env, callback);
+    raop_set_log_level(ctx->raop, LOGGER_INFO);
+    raop_set_log_callback(ctx->raop, _log_callback, ctx);
 
     const char *keyfile_c = env->GetStringUTFChars(keyFile, NULL);
     const char *name_c = env->GetStringUTFChars(name, NULL);
@@ -82,7 +83,13 @@ Java_io_github_jqssun_airplay_bridge_NativeBridge_nativeInit(
 
     int ret = raop_init2(ctx->raop, nohold ? 1 : 0, device_id, keyfile_c);
     if (ret < 0) {
-        LOGE("raop_init2 failed: %d", ret);
+        ctx->log->error("AirPlay identity initialization failed: %d", ret);
+        env->ReleaseStringUTFChars(keyFile, keyfile_c);
+        env->ReleaseStringUTFChars(name, name_c);
+        raop_destroy(ctx->raop);
+        android_callbacks_destroy(&ctx->cb_ctx, env);
+        delete ctx;
+        return 0;
     }
 
     if (requirePin) {
@@ -107,9 +114,6 @@ Java_io_github_jqssun_airplay_bridge_NativeBridge_nativeInit(
 
     env->ReleaseStringUTFChars(keyFile, keyfile_c);
     env->ReleaseStringUTFChars(name, name_c);
-
-    ctx->log = std::make_shared<LogSink>();
-    ctx->log->bind(env, callback);
 
     ctx->cb_ctx.audio_engine = audio_engine_create(ctx->log, 44100, 2);
 

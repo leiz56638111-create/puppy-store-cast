@@ -102,6 +102,8 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     private val _serverState = MutableStateFlow(ServerState.STOPPED)
     val serverState = _serverState.asStateFlow()
 
+    private var acceptedConnections = 0
+    private var listeningPort = 0
     private val _connectionCount = MutableStateFlow(0)
     val connectionCount = _connectionCount.asStateFlow()
 
@@ -248,8 +250,9 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
 
     fun connectionDetails(): String = buildString {
         val d = collectDebugInfo()
-        append("小狗便利店投屏 1.0.1\n上游 jqssun/android-airplay-server v0.0.36 (a46cca0)\n")
+        append("小狗便利店投屏 1.0.2\n上游 jqssun/android-airplay-server v0.0.36 (a46cca0)\n")
         append("${Build.MANUFACTURER} ${Build.MODEL} · Android ${Build.VERSION.RELEASE} / API ${Build.VERSION.SDK_INT}\n")
+        append("实际监听端口 $listeningPort · 本次运行累计连接 $acceptedConnections\n")
         append("服务 ${_serverState.value} · 连接 ${d.connections} · 视频地址请求 $videoRequests\n")
         append("方式 ${if (_videoPlaybackActive.value) "视频地址 / HLS" else if (_mirroringActive.value) "视频流 / 屏幕镜像" else if (_audioOnly.value) "仅收到音频" else "等待"}\n")
         append("后台待机 ${if (presentationVisible) "界面可见" else "后台"} · 待打开 $pendingPresentation\n")
@@ -470,7 +473,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
         wakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "airplay:server").apply { acquire() }
 
-        nsdManager = NsdServiceManager(this).apply { acquireMulticastLock() }
+        nsdManager = NsdServiceManager(this) { event -> log(event) }.apply { acquireMulticastLock() }
 
         val hwAddr = getHwAddr()
         val keyFile = filesDir.resolve("airplay.pem").absolutePath
@@ -541,6 +544,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
             return
         }
 
+        listeningPort = port
         // register mdns services
         val raopTxt = NativeBridge.nativeGetRaopTxtRecords(nativeHandle) ?: emptyMap()
         val airplayTxt = NativeBridge.nativeGetAirplayTxtRecords(nativeHandle) ?: emptyMap()
@@ -913,6 +917,7 @@ class AirPlayService : LifecycleService(), RaopCallbackHandler, LogListener {
     }
 
     override fun onConnectionInit() {
+        acceptedConnections++
         _connectionCount.value++
         log("Sender connected (${_connectionCount.value})")
         // Connection probes must not raise the TV interface. Wait for media callbacks.

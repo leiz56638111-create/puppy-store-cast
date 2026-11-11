@@ -1,0 +1,27 @@
+--- a/lib/raop.c
++++ b/lib/raop.c
+@@ -399,6 +399,16 @@
+     /* A new video may reuse the control socket. Mutations are checked against
+        the active video session by the handlers instead of aborting the process. */
+ 
++    /* Only fixed protocol labels; never log media URLs, headers or pairing bytes. */
++    const char *puppy_stage = NULL;
++    if (!strcmp(url, "/info")) puppy_stage = "info";
++    else if (!strcmp(url, "/pair-setup")) puppy_stage = "pair-setup";
++    else if (!strcmp(url, "/pair-verify")) puppy_stage = "pair-verify";
++    else if (!strcmp(url, "/fp-setup")) puppy_stage = "fp-setup";
++    else if (!strcmp(method, "SETUP")) puppy_stage = "SETUP";
++    else if (!strcmp(method, "RECORD")) puppy_stage = "RECORD";
++    else if (!strcmp(url, "/play")) puppy_stage = "play";
++    if (puppy_stage) logger_log(raop->logger, LOGGER_INFO, "PuppyStage: request %s", puppy_stage);
+     logger_log(raop->logger, LOGGER_DEBUG, "Handling request %s with URL %s", method, url);
+     raop_handler_t handler = NULL;
+     if (!hls_request && !strcmp(protocol, "RTSP/1.0")) {
+@@ -479,6 +489,7 @@
+ 
+     if (handler != NULL) {
+         handler(conn, request, *response, &response_data, &response_datalen);
++        if (puppy_stage) logger_log(raop->logger, LOGGER_INFO, "PuppyStage: handler returned %s", puppy_stage);
+     } else {
+         logger_log(raop->logger, LOGGER_INFO,
+                    "Unhandled Client Request: %s %s %s", method, url, protocol);

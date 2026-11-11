@@ -30,6 +30,7 @@ class MainActivity : Activity() {
     private lateinit var pause: Button
     private lateinit var waitingDetails: Button
     private lateinit var playbackDetails: Button
+    private lateinit var scaleButton: Button
     private var dialog: AlertDialog? = null
     private var mode = ""
     private var lastAspect = 0f
@@ -75,7 +76,11 @@ class MainActivity : Activity() {
                     if (playback) service?.setVideoPlaybackSurface(holder.surface) else service?.setVideoSurface(holder.surface)
                     if (this@MainActivity.foreground) attachVisiblePresentation()
                 }
-                override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {}
+                override fun surfaceChanged(holder: SurfaceHolder, format: Int, width: Int, height: Int) {
+                    // SurfaceView may resize without destruction. Rebind on the GL thread
+                    // so viewport and the last paused frame follow the new buffer size.
+                    if (!playback && width > 0 && height > 0) service?.setVideoSurface(holder.surface)
+                }
                 override fun surfaceDestroyed(holder: SurfaceHolder) {
                     if (playback) service?.clearVideoPlaybackSurface(holder.surface) else service?.clearVideoSurface(holder.surface)
                 }
@@ -91,9 +96,10 @@ class MainActivity : Activity() {
         root.addView(waiting, FrameLayout.LayoutParams(-1, -1))
         tools = LinearLayout(this).apply { visibility = View.GONE; setPadding(dp(12), dp(8), dp(12), dp(8)); background = NightLobby.shape(this@MainActivity, 0xee192927.toInt(), 16, 0) }
         playbackDetails = button("连接详情") { details() }
+        scaleButton = button("画面大小") { showMirrorScale() }
         pause = button("暂停") { service?.let { it.setVideoPlaying(!it.videoPlaybackInfo.value.playing) }; armHide() }
         val end = button("结束接收") { service?.restartReceiver() }
-        listOf(playbackDetails, pause, end).forEachIndexed { index, b ->
+        listOf(playbackDetails, scaleButton, pause, end).forEachIndexed { index, b ->
             tools.addView(b, LinearLayout.LayoutParams(-2, dp(48)).apply { if (index > 0) leftMargin = dp(10) })
         }
         root.addView(tools, FrameLayout.LayoutParams(-2, -2, Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL))
@@ -183,19 +189,39 @@ class MainActivity : Activity() {
         waiting.state(if (ready) "● 已就绪 · 等待连接" else "正在启动…", message, ready)
         pause.text = if (s?.videoPlaybackInfo?.value?.playing == false) "继续" else "暂停"
         pause.visibility = if (mode == "视频地址") View.VISIBLE else View.GONE
+        scaleButton.visibility = if (mode == "视频流") View.VISIBLE else View.GONE
         val visibleButtons = (0 until tools.childCount).map { tools.getChildAt(it) }.filterIsInstance<Button>().filter { it.visibility == View.VISIBLE }
         link(visibleButtons)
         val aspect = if (mode == "视频地址") s?.videoPlaybackAspect?.value ?: (16f / 9f) else s?.videoAspect?.value ?: (16f / 9f)
         if (mode != "等待" && root.width > 0 && root.height > 0 && (changed || lastAspect != aspect)) {
             lastAspect = aspect
-            val width = minOf(root.width, (root.height * aspect).toInt()).coerceAtLeast(1)
-            val height = minOf(root.height, (width / aspect).toInt()).coerceAtLeast(1)
+            val scale = if (mode == "视频流") getPreferences(Context.MODE_PRIVATE).getInt("mirror_scale", 100).coerceIn(50, 100) else 100
+            val maxWidth = root.width * scale / 100
+            val maxHeight = root.height * scale / 100
+            val width = minOf(maxWidth, (maxHeight * aspect).toInt()).coerceAtLeast(1)
+            val height = minOf(maxHeight, (width / aspect).toInt()).coerceAtLeast(1)
             (if (mode == "视频地址") video else mirror).layoutParams = FrameLayout.LayoutParams(width, height, Gravity.CENTER)
         }
         if (changed) {
             tools.visibility = View.GONE
             if (mode == "等待") waiting.focusDefault() else root.requestFocus()
         }
+    }
+    private fun showMirrorScale() {
+        if (dialog?.isShowing == true) return
+        main.removeCallbacks(hideTools)
+        val values = intArrayOf(100, 90, 80, 70, 60, 50)
+        val labels = values.map { if (it == 100) "完整显示（默认）" else "缩小至 ${it}%" }.toTypedArray()
+        val current = getPreferences(Context.MODE_PRIVATE).getInt("mirror_scale", 100)
+        dialog = AlertDialog.Builder(this).setTitle("镜像画面大小")
+            .setSingleChoiceItems(labels, values.indexOf(current).coerceAtLeast(0)) { d, which ->
+                getPreferences(Context.MODE_PRIVATE).edit().putInt("mirror_scale", values[which]).apply()
+                lastAspect = 0f
+                render()
+                d.dismiss()
+            }.setNegativeButton("关闭", null).create().apply {
+                setOnDismissListener { dialog = null; armHide() }; show()
+            }
     }
     private fun armHide() { main.removeCallbacks(hideTools); if (mode != "等待") main.postDelayed(hideTools, 6000) }
     private fun showTools(focus: Boolean) {

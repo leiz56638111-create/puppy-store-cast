@@ -1,0 +1,11 @@
+--- a/lib/raop.c
++++ b/lib/raop.c
+@@ -718,7 +718,7 @@
+ raop_destroy(raop_t *raop) {
+     if (raop) {
+         raop_destroy_airplay_video(raop, -1);
+-        raop_stop_httpd(raop);
++        if (raop->httpd) raop_stop_httpd(raop);
+         pairing_destroy(raop->pairing);
+         httpd_destroy(raop->httpd);
+         logger_destroy(raop->logger);
