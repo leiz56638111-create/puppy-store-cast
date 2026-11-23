@@ -4,7 +4,7 @@
 
 1.0.2 修复AirPlay镜像缩放、横竖屏及显示区域变化时的画面裁切，增加遥控器可操作的画面大小设置和连接诊断。保留“夜色客厅”与DLNA/AirPlay后台待机，两模式仍互斥。使用方式见[1.0.2说明](docs/1.0.2.md)。VPN可能影响局域网连接，遇到搜得到但连不上时可先临时断开VPN对照。
 
-1.0.2当前为本地构建版本，尚未上传GitHub。此前公开下载见[1.0.1发布页](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.1)。历史独立包保留。
+下载[1.0.2 APK](https://github.com/leiz56638111-create/puppy-store-cast/releases/download/v1.0.2/PuppyStoreCast-1.0.2.apk)，或查看[更新说明、对应源码与校验文件](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.2)。[1.0.1历史版本](https://github.com/leiz56638111-create/puppy-store-cast/releases/tag/v1.0.1)及独立测试包保留。
 
 ![1.0.1 首页](docs/images/waiting-1.0.1.png)
 
